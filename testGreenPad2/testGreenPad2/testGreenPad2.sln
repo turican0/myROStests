@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.9.34616.47
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "testGreenPad2", "testGreenPad2.vcxproj", "{43A931F2-6B1A-4BC3-8481-20FAC2775EF5}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{43A931F2-6B1A-4BC3-8481-20FAC2775EF5}.Debug|x64.ActiveCfg = Debug|x64
+		{43A931F2-6B1A-4BC3-8481-20FAC2775EF5}.Debug|x64.Build.0 = Debug|x64
+		{43A931F2-6B1A-4BC3-8481-20FAC2775EF5}.Debug|x86.ActiveCfg = Debug|Win32
+		{43A931F2-6B1A-4BC3-8481-20FAC2775EF5}.Debug|x86.Build.0 = Debug|Win32
+		{43A931F2-6B1A-4BC3-8481-20FAC2775EF5}.Release|x64.ActiveCfg = Release|x64
+		{43A931F2-6B1A-4BC3-8481-20FAC2775EF5}.Release|x64.Build.0 = Release|x64
+		{43A931F2-6B1A-4BC3-8481-20FAC2775EF5}.Release|x86.ActiveCfg = Release|Win32
+		{43A931F2-6B1A-4BC3-8481-20FAC2775EF5}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {86089C37-11A9-495B-A746-A4A85EB3434B}
+	EndGlobalSection
+EndGlobal
