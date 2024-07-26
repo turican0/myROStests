@@ -1,5 +1,6 @@
 ﻿#include <windows.h>
 #include <string>
+#include <tchar.h>
 
 // Velikost bufferu pro text
 const int BUFFER_SIZE = 1024;
@@ -19,7 +20,7 @@ ATOM MyRegisterClass(HINSTANCE hInstance) {
     WNDCLASSEX wcex;
 
     wcex.cbSize = sizeof(WNDCLASSEX);
-    wcex.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wcex.style = 0/* | CS_HREDRAW | CS_VREDRAW */  /* | CS_OWNDC*/;
     wcex.lpfnWndProc = WndProc;
     wcex.cbClsExtra = 0;
     wcex.cbWndExtra = 0;
@@ -132,11 +133,81 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
 int MyWinMain(HINSTANCE hInstance, int nCmdShow) {
 
-    MyRegisterClass(hInstance);
+    WNDCLASSEX wcex;
+    HFONT hf1, hf2;
 
-    if (!InitInstance(hInstance, nCmdShow)) {
+    wcex.cbSize = sizeof(WNDCLASSEX);
+    wcex.style = 0/*CS_HREDRAW | CS_VREDRAW | */ /*CS_OWNDC*/;
+    wcex.lpfnWndProc = WndProc;
+    wcex.cbClsExtra = 0;
+    wcex.cbWndExtra = 0;
+    wcex.hInstance = hInstance;
+    wcex.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+    wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    wcex.lpszMenuName = NULL;
+    wcex.lpszClassName = TEXT("ScrollTextClass");
+    wcex.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
+
+    RegisterClassEx(&wcex);
+
+    hInst = hInstance;
+
+    hWnd = CreateWindow(TEXT("ScrollTextClass"), TEXT("Scrolling Text Example"), WS_OVERLAPPEDWINDOW | WS_VSCROLL,
+        CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
+
+    if (!hWnd) {
         return FALSE;
     }
+
+    ShowWindow(hWnd, nCmdShow);
+    UpdateWindow(hWnd);
+
+    hf1 = CreateFont(30, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, ANSI_CHARSET,
+        OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+        DEFAULT_PITCH | FF_DONTCARE, L"Arial");
+    hf2 = CreateFont(30, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET,
+        OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+        DEFAULT_PITCH | FF_DONTCARE, L"Courier New");
+
+    HDC hdc1;
+    HDC hdc2;
+    hdc1 = GetDC(hWnd);
+    printf("hdc1: %x\n", hdc1);
+    ReleaseDC(hWnd, hdc1);
+
+    hdc2 = GetDC(hWnd);
+    printf("hdc2: %x\n", hdc2);
+    ReleaseDC(hWnd, hdc1);
+
+    hdc1 = GetDC(hWnd);
+    hdc2 = GetDC(hWnd);
+    printf("hdc1: %x\n", hdc1);
+    printf("hdc2: %x\n", hdc2);
+    ReleaseDC(hWnd, hdc1);
+    ReleaseDC(hWnd, hdc1);
+
+    /*HDC hdc1 = GetDC(hWnd);
+    printf("hdc1: %x\n", hdc1);
+    HFONT hfPrev1 = (HFONT)SelectObject(hdc1, hf1);
+    UINT taPrev1 = SetTextAlign(hdc1, TA_UPDATECP);
+    MoveToEx(hdc1, 0, 0, NULL);
+    
+    HDC hdc2 = GetDC(hWnd);
+    printf("hdc2: %x\n", hdc2);
+    HFONT hfPrev2 = (HFONT)SelectObject(hdc2, hf2);
+    for (const wchar_t* psz = L"Hello"; *psz; psz++)
+    {
+        POINT pt;
+        GetCurrentPositionEx(hdc1, &pt);
+        TextOut(hdc2, pt.x, pt.y + 30, psz, 1);
+        TextOut(hdc1, 0, 0, psz, 1);
+    }
+    SelectObject(hdc1, hfPrev1);
+    SelectObject(hdc2, hfPrev2);
+    SetTextAlign(hdc1, taPrev1);
+    ReleaseDC(hWnd, hdc1);
+    ReleaseDC(hWnd, hdc2);*/
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
