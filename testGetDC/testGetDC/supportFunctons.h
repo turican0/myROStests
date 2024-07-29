@@ -538,13 +538,15 @@ typedef struct _HEAD
 
 typedef struct _THROBJHEAD
 {
-    HEAD a;
+    HANDLE h;
+    DWORD cLockObj;
     struct _THREADINFO* pti;
 } THROBJHEAD, * PTHROBJHEAD;
 
 typedef struct _THRDESKHEAD
 {
-    HEAD a;
+    HANDLE h;
+    DWORD cLockObj;
     struct _THREADINFO* pti;
     struct _DESKTOP* rpdesk;
     PVOID pSelf;
@@ -679,6 +681,8 @@ typedef struct _POINTL {
     LONG y;
 } POINTL, * PPOINTL;
 
+#define _Notnull_
+
 typedef struct _DCLEVEL
 {
     //HPALETTE          hpal;
@@ -691,7 +695,7 @@ typedef struct _DCLEVEL
     POINTL            ptlBrushOrigin;
     //PBRUSH            pbrFill;
     //PBRUSH            pbrLine;
-    //_Notnull_ struct _LFONT* plfnt; /* LFONT* (TEXTOBJ*) */
+    _Notnull_ struct _LFONT* plfnt; /* LFONT* (TEXTOBJ*) */
     //HGDIOBJ           hPath; /* HPATH */
     //FLONG             flPath;
     //LINEATTRS         laPath; /* 0x20 bytes */
@@ -721,11 +725,16 @@ typedef struct _DCLEVEL
     //SIZE              sizl;
 } DCLEVEL, * PDCLEVEL;
 
+typedef struct _BASEOBJECT {
+    int a;
+    int hHmgr;
+} BASEOBJECT;
+
 typedef struct _DC
 {
     /* Header for all gdi objects in the handle table.
        Do not (re)move this. */
-    //BASEOBJECT  BaseObject;
+    BASEOBJECT  BaseObject;
 
     //DHPDEV      dhpdev;   /* <- PDEVOBJ.hPDev DHPDEV for device. */
     //DCTYPE      dctype;
@@ -879,8 +888,440 @@ void InsertHeadList(PLIST_ENTRY ListHead, PLIST_ENTRY Entry) {
     _EX_ListHead->Flink = (Entry);
     }
 
+static __inline
+VOID
+InitializeListHead(
+    IN PLIST_ENTRY ListHead
+)
+{
+    ListHead->Flink = ListHead->Blink = ListHead;
+}
 
+BOOL co_AddGuiApp(PPROCESSINFO W32Data)
+{
+    return FALSE;
+}
 
+void RemoveGuiApp(PPROCESSINFO W32Data)
+{
+}
+
+BOOL FASTCALL
+co_IntGraphicsCheck(BOOL Create)
+{
+    PPROCESSINFO W32Data;
+
+    W32Data = PsGetCurrentProcessWin32Process();
+    if (Create)
+    {
+        if (!(W32Data->W32PF_flags & W32PF_CREATEDWINORDC) && !(W32Data->W32PF_flags & W32PF_MANUALGUICHECK))
+        {
+            return co_AddGuiApp(W32Data);
+        }
+    }
+    else
+    {
+        if ((W32Data->W32PF_flags & W32PF_CREATEDWINORDC) && !(W32Data->W32PF_flags & W32PF_MANUALGUICHECK))
+        {
+            RemoveGuiApp(W32Data);
+        }
+    }
+
+    return TRUE;
+}
+
+typedef UNICODE_STRING* PUNICODE_STRING;
+
+#define CONST
+
+typedef struct _devicemodeW {
+    //WCHAR   dmDeviceName[CCHDEVICENAME];
+    //WORD   dmSpecVersion;
+    //WORD   dmDriverVersion;
+    //WORD   dmSize;
+    //WORD   dmDriverExtra;
+    DWORD  dmFields;
+    /*_ANONYMOUS_UNION union {
+        _ANONYMOUS_STRUCT struct {
+            short dmOrientation;
+            short dmPaperSize;
+            short dmPaperLength;
+            short dmPaperWidth;
+            short dmScale;
+            short dmCopies;
+            short dmDefaultSource;
+            short dmPrintQuality;
+        } DUMMYSTRUCTNAME1;
+        struct {
+            POINTL dmPosition;
+            DWORD  dmDisplayOrientation;
+            DWORD  dmDisplayFixedOutput;
+        } DUMMYSTRUCTNAME2;
+    } DUMMYUNIONNAME1;*/
+    short  dmColor;
+    short  dmDuplex;
+    short  dmYResolution;
+    short  dmTTOption;
+    short  dmCollate;
+    //WCHAR  dmFormName[CCHFORMNAME];
+    //WORD   dmLogPixels;
+    DWORD  dmBitsPerPel;
+    DWORD  dmPelsWidth;
+    DWORD  dmPelsHeight;
+    /*_ANONYMOUS_UNION union {
+        DWORD  dmDisplayFlags;
+        DWORD  dmNup;
+    } DUMMYUNIONNAME2;*/
+    DWORD  dmDisplayFrequency;
+#if(WINVER >= 0x0400)
+    DWORD  dmICMMethod;
+    DWORD  dmICMIntent;
+    DWORD  dmMediaType;
+    DWORD  dmDitherType;
+    DWORD  dmReserved1;
+    DWORD  dmReserved2;
+#if (WINVER >= 0x0500) || (_WIN32_WINNT >= 0x0400)
+    DWORD  dmPanningWidth;
+    DWORD  dmPanningHeight;
+#endif
+#endif /* WINVER >= 0x0400 */
+} DEVMODEW, * LPDEVMODEW, * PDEVMODEW, * NPDEVMODEW;
+
+HDC FASTCALL
+IntGdiCreateDC(
+    PUNICODE_STRING Driver,
+    PUNICODE_STRING pustrDevice,
+    PVOID pUMdhpdev,
+    CONST PDEVMODEW pdmInit,
+    BOOL CreateAsIC)
+{
+    HDC hdc=NULL;
+
+    /*hdc = GreOpenDCW(pustrDevice,
+        pdmInit,
+        NULL,
+        CreateAsIC ? DCTYPE_INFO :
+        (Driver ? DCTYPE_DIRECT : DCTYPE_DIRECT),
+        TRUE,
+        NULL,
+        NULL,
+        pUMdhpdev);*/
+
+    return hdc;
+}
+
+PREGION FASTCALL
+VIS_ComputeVisibleRegion(
+    PWND Wnd,
+    BOOLEAN ClientArea,
+    BOOLEAN ClipChildren,
+    BOOLEAN ClipSiblings)
+{
+    return NULL;
+}
+
+PREGION FASTCALL IntSysCreateRectpRgn(INT a, INT b, INT c, INT d) {
+    return NULL;
+};
+
+typedef int POOL_TYPE;
+typedef int SIZE_T;
+
+PVOID
+NTAPI
+ExAllocatePoolWithTag(IN POOL_TYPE PoolType,
+    IN SIZE_T NumberOfBytes,
+    IN ULONG Tag)
+{
+    return 0;
+}
+
+VOID
+NTAPI
+ExFreePoolWithTag(IN PVOID P,
+    IN ULONG TagToFree)
+{
+}
+
+#define UserHMGetHandle(obj) ((obj)->head.h)
+#define UserHMSetHandle(obj, handle) ((obj)->head.h = (handle))
+
+#define InsertTailList(ListHead,Entry) {\
+    PLIST_ENTRY _EX_Blink;\
+    PLIST_ENTRY _EX_ListHead;\
+    _EX_ListHead = (ListHead);\
+    _EX_Blink = _EX_ListHead->Blink;\
+    (Entry)->Flink = _EX_ListHead;\
+    (Entry)->Blink = _EX_Blink;\
+    _EX_Blink->Flink = (Entry);\
+    _EX_ListHead->Blink = (Entry);\
+    }
+
+VOID FASTCALL DCU_SetDcUndeletable(HDC a) {};
+
+#define WINAPI
+#define _In_
+#define _In_opt_
+
+struct _THREADINFO* GetW32ThreadInfo() { return NULL;};
+BOOL NTAPI GreSetDCOwner(HDC hdc, ULONG ulOwner) { return FALSE; };
+BOOL WINAPI GreSetDCOrg(_In_  HDC a, _In_ LONG b, _In_ LONG c, _In_opt_ PRECTL d) { return FALSE; };
+
+typedef int HGDIOBJ;
+
+BOOL NTAPI GreDeleteObject(HGDIOBJ hObject) { return FALSE; };
+
+typedef int WORD;
+
+WORD APIENTRY IntGdiSetHookFlags(HDC hDC, WORD Flags) { return 0; };
+
+PWND FASTCALL UserGetWindowObject(HWND hWnd) { return NULL; };
+
+HWND FASTCALL IntGetDesktopWindow(VOID) { return NULL; };
+
+#define IntSysCreateRectpRgnIndirect(prc) \
+  IntSysCreateRectpRgn((prc)->left, (prc)->top, (prc)->right, (prc)->bottom)
+
+PREGION FASTCALL REGION_LockRgn( _In_ HRGN hrgn) { return NULL; };
+
+INT FASTCALL IntGdiCombineRgn(PREGION a, PREGION b, PREGION c, INT d) { return 0; };
+
+VOID FASTCALL REGION_UnlockRgn(_In_ PREGION prgn) {};
+
+VOID FASTCALL REGION_Delete(PREGION a) {};
+
+#define __kernel_entry
+#define W32KAPI
+
+__kernel_entry W32KAPI BOOL APIENTRY NtGdiSelectClipPath(_In_ HDC hdc, _In_ INT iMode) { return FALSE; };
+
+VOID FASTCALL GdiSelectVisRgn(HDC hdc, PREGION prgn) {};
+
+typedef long FLONG;
+
+VOID FASTCALL IntEngWindowChanged(_In_ struct _WND* Window, _In_ FLONG flChanged) {};
+
+BOOL FASTCALL IntGdiCleanDC(HDC hDC) { return FALSE; };
+
+typedef long PKTHREAD;
+void KeEnterCriticalRegionThread(PKTHREAD _Thread)
+{
+    /*
+    // Sanity checks
+    ASSERT((_Thread) == KeGetCurrentThread());
+    ASSERT(((_Thread)->KernelApcDisable <= 0) &&
+           ((_Thread)->KernelApcDisable != -32768));
+ 
+    // Disable Kernel APCs
+    (_Thread)->KernelApcDisable--;
+    */
+}
+
+#define NTSYSAPI
+
+NTSYSAPI
+PKTHREAD
+NTAPI
+KeGetCurrentThread(VOID) { return NULL; };
+
+void KeEnterCriticalRegion()
+{
+    PKTHREAD _Thread = KeGetCurrentThread();
+    KeEnterCriticalRegionThread(_Thread);
+}
+
+void KeLeaveCriticalRegionThread(PKTHREAD _Thread)
+{
+    /*
+    // Sanity checks
+    ASSERT((_Thread) == KeGetCurrentThread());
+    ASSERT((_Thread)->KernelApcDisable < 0);
+ 
+    // Enable Kernel APCs
+    (_Thread)->KernelApcDisable++;
+ 
+    // Check if Kernel APCs are now enabled
+    if (!((_Thread)->KernelApcDisable))
+    {
+        // Check if we need to request an APC Delivery
+        if (!(IsListEmpty(&(_Thread)->ApcState.ApcListHead[KernelMode])) &&
+            !((_Thread)->SpecialApcDisable))
+        {
+            // Check for the right environment
+            KiCheckForKernelApcDelivery();
+        }
+    }
+    */
+}
+
+void KeLeaveCriticalRegion()
+{
+    PKTHREAD _Thread = KeGetCurrentThread();
+    KeLeaveCriticalRegionThread(_Thread);
+}
+
+BOOL NTAPI GreIsHandleValid(HGDIOBJ hobj) { return FALSE; };
+
+#define ERR(msg) do { { printf("%s\n", msg); } } while (0)
+
+#define RemoveHeadList(ListHead) \
+    (ListHead)->Flink;\
+    {RemoveEntryList((ListHead)->Flink)}
+
+#define RemoveEntryList(Entry) {\
+    PLIST_ENTRY _EX_Blink;\
+    PLIST_ENTRY _EX_Flink;\
+    _EX_Flink = (Entry)->Flink;\
+    _EX_Blink = (Entry)->Blink;\
+    _EX_Blink->Flink = _EX_Flink;\
+    _EX_Flink->Blink = _EX_Blink;\
+    }
+
+__kernel_entry W32KAPI HRGN APIENTRY NtGdiCreateRectRgn(_In_ INT xLeft, _In_ INT yTop, _In_ INT xRight, _In_ INT yBottom) { return NULL; };
+
+__kernel_entry W32KAPI DWORD APIENTRY NtGdiSetLayout( _In_ HDC hdc, _In_ LONG wox, _In_ DWORD dwLayout) { return 0; };
+
+#define ASSERT(condition) \
+    do { \
+        if (!(condition)) { \
+            printf("Assertion failed: %s, file %s, line %d\n", #condition, __FILE__, __LINE__); \
+            abort(); \
+        } \
+    } while (0)
+
+ULONG NTAPI GreGetObjectOwner(HGDIOBJ hobj) { return 0; };
+
+BOOL FASTCALL IntGdiDeleteDC(HDC a, BOOL b) { return FALSE; };
+
+typedef enum GDIObjType
+{
+    GDIObjType_DEF_TYPE = 0x00,
+    GDIObjType_DC_TYPE = 0x01,
+    GDIObjType_UNUSED1_TYPE = 0x02,
+    GDIObjType_UNUSED2_TYPE = 0x03,
+    GDIObjType_RGN_TYPE = 0x04,
+    GDIObjType_SURF_TYPE = 0x05,
+    GDIObjType_CLIENTOBJ_TYPE = 0x06,
+    GDIObjType_PATH_TYPE = 0x07,
+    GDIObjType_PAL_TYPE = 0x08,
+    GDIObjType_ICMLCS_TYPE = 0x09,
+    GDIObjType_LFONT_TYPE = 0x0a,
+    GDIObjType_RFONT_TYPE = 0x0b,
+    GDIObjType_PFE_TYPE = 0x0c,
+    GDIObjType_PFT_TYPE = 0x0d,
+    GDIObjType_ICMCXF_TYPE = 0x0e,
+    GDIObjType_SPRITE_TYPE = 0x0f,
+    GDIObjType_BRUSH_TYPE = 0x10,
+    GDIObjType_UMPD_TYPE = 0x11,
+    GDIObjType_UNUSED4_TYPE = 0x12,
+    GDIObjType_SPACE_TYPE = 0x13,
+    GDIObjType_UNUSED5_TYPE = 0x14,
+    GDIObjType_META_TYPE = 0x15,
+    GDIObjType_EFSTATE_TYPE = 0x16,
+    GDIObjType_BMFD_TYPE = 0x17,
+    GDIObjType_VTFD_TYPE = 0x18,
+    GDIObjType_TTFD_TYPE = 0x19,
+    GDIObjType_RC_TYPE = 0x1a,
+    GDIObjType_TEMP_TYPE = 0x1b,
+    GDIObjType_DRVOBJ_TYPE = 0x1c,
+    GDIObjType_DCIOBJ_TYPE = 0x1d,
+    GDIObjType_SPOOL_TYPE = 0x1e,
+    GDIObjType_MAX_TYPE = 0x1e,
+    GDIObjTypeTotal = 0x1f,
+} GDIOBJTYPE, * PGDIOBJTYPE;
+
+typedef enum GDILoObjType
+{
+    GDILoObjType_LO_BRUSH_TYPE = 0x100000,
+    GDILoObjType_LO_DC_TYPE = 0x10000,
+    GDILoObjType_LO_BITMAP_TYPE = 0x50000,
+    GDILoObjType_LO_PALETTE_TYPE = 0x80000,
+    GDILoObjType_LO_FONT_TYPE = 0xa0000,
+    GDILoObjType_LO_REGION_TYPE = 0x40000,
+    GDILoObjType_LO_ICMLCS_TYPE = 0x90000,
+    GDILoObjType_LO_CLIENTOBJ_TYPE = 0x60000,
+    GDILoObjType_LO_UMPD_TYPE = 0x110000,
+    GDILoObjType_LO_META_TYPE = 0x150000,
+    GDILoObjType_LO_ALTDC_TYPE = 0x210000,
+    GDILoObjType_LO_PEN_TYPE = 0x300000,
+    GDILoObjType_LO_EXTPEN_TYPE = 0x500000,
+    GDILoObjType_LO_DIBSECTION_TYPE = 0x250000,
+    GDILoObjType_LO_METAFILE16_TYPE = 0x260000,
+    GDILoObjType_LO_METAFILE_TYPE = 0x460000,
+    GDILoObjType_LO_METADC16_TYPE = 0x660000
+} GDILOOBJTYPE, * PGDILOOBJTYPE;
+
+#define FORCEINLINE
+typedef BASEOBJECT *POBJ;
+typedef unsigned char UCHAR;
+
+typedef GDIOBJTYPE * PGDIOBJ;
+
+PGDIOBJ NTAPI GDIOBJ_LockObject(HGDIOBJ hobj, UCHAR objt) { return NULL; }
+
+#define GDI_HANDLE_INDEX_MASK (GDI_HANDLE_COUNT - 1)
+#define GDI_HANDLE_TYPE_MASK  0x007f0000
+#define GDI_HANDLE_BASETYPE_MASK 0x001f0000
+#define GDI_HANDLE_STOCK_MASK 0x00800000
+#define GDI_HANDLE_REUSE_MASK 0xff000000
+#define GDI_HANDLE_REUSECNT_SHIFT 24
+#define GDI_HANDLE_UPPER_MASK 0x0000ffff
+
+#define GDI_HANDLE_GET_TYPE(h)     \
+    (((ULONG_PTR)(h)) & GDI_HANDLE_TYPE_MASK)
+
+FORCEINLINE
+PDC
+DC_LockDc(HDC hdc)
+{
+    PDC pdc;
+
+    pdc = (PDC)GDIOBJ_LockObject((HGDIOBJ)hdc, GDIObjType_DC_TYPE);
+    if (pdc)
+    {
+        ASSERT((GDI_HANDLE_GET_TYPE(pdc->BaseObject.hHmgr) == GDILoObjType_LO_DC_TYPE) ||
+            (GDI_HANDLE_GET_TYPE(pdc->BaseObject.hHmgr) == GDILoObjType_LO_ALTDC_TYPE));
+        ASSERT(pdc->dclevel.plfnt != NULL);
+        ASSERT(GDI_HANDLE_GET_TYPE(((POBJ)pdc->dclevel.plfnt)->hHmgr) == GDILoObjType_LO_FONT_TYPE);
+    }
+
+    return pdc;
+}
+
+BOOL FASTCALL IntIsChildWindow(PWND Parent, PWND Child) { return FALSE; };
+
+#define _Inout_
+
+BOOL FASTCALL REGION_bOffsetRgn( _Inout_ PREGION prgn, _In_ INT cx, _In_ INT cy) { return FALSE; };
+
+__kernel_entry W32KAPI INT APIENTRY NtGdiOffsetClipRgn(_In_ HDC hdc, _In_ INT x, _In_ INT y) { return 0; }
+
+__kernel_entry W32KAPI INT APIENTRY NtGdiOffsetRgn( _In_ HRGN hrgn, _In_ INT cx, _In_ INT cy) { return 0; }
+
+FORCEINLINE
+VOID
+DC_UnlockDc(PDC pdc)
+{
+    ASSERT(pdc->dclevel.plfnt != NULL);
+    ASSERT(GDI_HANDLE_GET_TYPE(((POBJ)pdc->dclevel.plfnt)->hHmgr) == GDILoObjType_LO_FONT_TYPE);
+
+    //GDIOBJ_vUnlockObject(&pdc->BaseObject);
+}
+
+HANDLE FASTCALL UserGetProp(_In_ PWND Window, _In_ ATOM Atom, _In_ BOOLEAN SystemProp) { return NULL; };
+
+// Win: EnterCrit
+VOID FASTCALL UserEnterExclusive(VOID)
+{
+    //ASSERT_NOGDILOCKS();
+    //KeEnterCriticalRegion();
+    //ExAcquireResourceExclusiveLite(&UserLock, TRUE);
+    //gptiCurrent = PsGetCurrentThreadWin32Thread();
+}
+
+VOID FASTCALL UserLeave(VOID) {};
+
+HPALETTE NTAPI GdiSelectPalette( _In_ HDC hDC, _In_ HPALETTE hpal, _In_ BOOL ForceBackground) { return FALSE; };
 
 
 
