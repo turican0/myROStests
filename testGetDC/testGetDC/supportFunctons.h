@@ -2895,6 +2895,209 @@ INT __WideCharToMultiByte(UINT page, DWORD flags, LPCWSTR src, INT srclen, LPSTR
 #define CSF_CACHEDSMICON    0x0040
 #define CSF_WIN40COMPAT     0x0080
 
+typedef DWORD* LPDWORD;
+
+typedef struct _CLSMENUNAME
+{
+    LPSTR pszClientAnsiMenuName;
+    LPWSTR pwszClientUnicodeMenuName;
+    PUNICODE_STRING pusMenuName;
+} CLSMENUNAME, * PCLSMENUNAME;
+
+typedef struct _STRING
+{
+    USHORT Length;
+    USHORT MaximumLength;
+    PCHAR Buffer;
+} STRING, * PSTRING;
+
+typedef STRING ANSI_STRING;
+
+HINSTANCE User32Instance;
+
+typedef HINSTANCE HMODULE;
+
+long moduleIndex = 1;
+
+#define GET_MODULE_HANDLE_EX_FLAG_PIN 0x1
+#define GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT 0x2
+#define GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS 0x4
+
+#define STATUS_INVALID_PARAMETER_1              ((NTSTATUS)0xC00000EF)
+#define STATUS_INVALID_PARAMETER_2              ((NTSTATUS)0xC00000F0)
+#define STATUS_INVALID_PARAMETER_3              ((NTSTATUS)0xC00000F1)
+#define STATUS_INVALID_PARAMETER_4              ((NTSTATUS)0xC00000F2)
+#define STATUS_INVALID_PARAMETER_5              ((NTSTATUS)0xC00000F3)
+#define STATUS_INVALID_PARAMETER_6              ((NTSTATUS)0xC00000F4)
+#define STATUS_INVALID_PARAMETER_7              ((NTSTATUS)0xC00000F5)
+#define STATUS_INVALID_PARAMETER_8              ((NTSTATUS)0xC00000F6)
+#define STATUS_INVALID_PARAMETER_9              ((NTSTATUS)0xC00000F7)
+#define STATUS_INVALID_PARAMETER_10             ((NTSTATUS)0xC00000F8)
+#define STATUS_INVALID_PARAMETER_11             ((NTSTATUS)0xC00000F9)
+#define STATUS_INVALID_PARAMETER_12             ((NTSTATUS)0xC00000FA)
+
+#define BASEP_GET_MODULE_HANDLE_EX_PARAMETER_VALIDATION_ERROR    1
+#define BASEP_GET_MODULE_HANDLE_EX_PARAMETER_VALIDATION_SUCCESS  2
+#define BASEP_GET_MODULE_HANDLE_EX_PARAMETER_VALIDATION_CONTINUE 3
+
+DWORD
+WINAPI
+BasepGetModuleHandleExParameterValidation(DWORD dwFlags,
+    LPCWSTR lpwModuleName,
+    HMODULE* phModule)
+{
+    /* Set phModule to 0 if it's not a NULL pointer */
+    if (phModule) *phModule = 0;
+
+    /* Check for invalid flags combination */
+    if (dwFlags & ~(GET_MODULE_HANDLE_EX_FLAG_PIN |
+        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT |
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS) ||
+        ((dwFlags & GET_MODULE_HANDLE_EX_FLAG_PIN) &&
+            (dwFlags & GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT)) ||
+        (!lpwModuleName && (dwFlags & GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS))
+        )
+    {
+        //BaseSetLastNTError(STATUS_INVALID_PARAMETER_1);
+        return BASEP_GET_MODULE_HANDLE_EX_PARAMETER_VALIDATION_ERROR;
+    }
+
+    /* Check 2nd parameter */
+    if (!phModule)
+    {
+        //BaseSetLastNTError(STATUS_INVALID_PARAMETER_2);
+        return BASEP_GET_MODULE_HANDLE_EX_PARAMETER_VALIDATION_ERROR;
+    }
+
+    /* Return what we have according to the module name */
+    if (lpwModuleName)
+    {
+        return BASEP_GET_MODULE_HANDLE_EX_PARAMETER_VALIDATION_CONTINUE;
+    }
+
+    /* No name given, so put ImageBaseAddress there */
+    *phModule = (HMODULE)(moduleIndex++);//NtCurrentPeb()->ImageBaseAddress;
+
+    return BASEP_GET_MODULE_HANDLE_EX_PARAMETER_VALIDATION_SUCCESS;
+}
+
+BOOLEAN
+WINAPI
+BasepGetModuleHandleExW(BOOLEAN NoLock, DWORD dwPublicFlags, LPCWSTR lpwModuleName, HMODULE* phModule)
+{
+    ULONG_PTR Cookie;
+    NTSTATUS Status = STATUS_SUCCESS, Status2;
+    HANDLE hModule = NULL;
+    UNICODE_STRING ModuleNameU;
+    DWORD dwValid;
+    BOOLEAN Redirected = FALSE; // FIXME
+
+    /* Validate parameters */
+    dwValid = BasepGetModuleHandleExParameterValidation(dwPublicFlags, lpwModuleName, phModule);
+    //ASSERT(dwValid == BASEP_GET_MODULE_HANDLE_EX_PARAMETER_VALIDATION_CONTINUE);
+
+    /* Acquire lock if necessary */
+    if (!NoLock)
+    {
+        Status = LdrLockLoaderLock(0, NULL, &Cookie);
+        if (!NT_SUCCESS(Status))
+        {
+            /* Fail */
+            BaseSetLastNTError(Status);
+            if (phModule) *phModule = NULL;
+            return NT_SUCCESS(Status);
+        }
+    }
+
+    if (!(dwPublicFlags & GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS))
+    {
+        /* Create a unicode string out of module name */
+        RtlInitUnicodeString(&ModuleNameU, lpwModuleName);
+
+        // FIXME: Do some redirected DLL stuff?
+        if (Redirected)
+        {
+            UNIMPLEMENTED;
+        }
+
+        if (!hModule)
+        {
+            hModule = GetModuleHandleForUnicodeString(&ModuleNameU);
+            if (!hModule)
+            {
+                /* Last error is already set, so just return failure by setting status */
+                Status = STATUS_DLL_NOT_FOUND;
+                goto quickie;
+            }
+        }
+    }
+    else
+    {
+        /* Perform Pc to file header to get module instance */
+        hModule = (HMODULE)RtlPcToFileHeader((PVOID)lpwModuleName,
+            (PVOID*)&hModule);
+
+        /* Check if it succeeded */
+        if (!hModule)
+        {
+            /* Set "dll not found" status and quit */
+            Status = STATUS_DLL_NOT_FOUND;
+            goto quickie;
+        }
+    }
+
+    /* Check if changing reference is not forbidden */
+    if (!(dwPublicFlags & GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT))
+    {
+        /* Add reference to this DLL */
+        Status = LdrAddRefDll((dwPublicFlags & GET_MODULE_HANDLE_EX_FLAG_PIN) ? LDR_ADDREF_DLL_PIN : 0,
+            hModule);
+    }
+
+quickie:
+    /* Set last error in case of failure */
+    if (!NT_SUCCESS(Status))
+        BaseSetLastNTError(Status);
+
+    /* Unlock loader lock if it was acquired */
+    if (!NoLock)
+    {
+        Status2 = LdrUnlockLoaderLock(0, Cookie);
+        ASSERT(NT_SUCCESS(Status2));
+    }
+
+    /* Set the module handle to the caller */
+    if (phModule) *phModule = hModule;
+
+    /* Return TRUE on success and FALSE otherwise */
+    return NT_SUCCESS(Status);
+}
+
+HMODULE
+WINAPI
+GetModuleHandleW(LPCWSTR lpModuleName)
+{
+    HMODULE hModule;
+    BOOLEAN Success;
+
+    /* If current module is requested - return it right away */
+    if (!lpModuleName)
+        //return ((HMODULE)NtCurrentPeb()->ImageBaseAddress);
+        return (HMODULE)(moduleIndex++);
+
+    /* Use common helper routine */
+    Success = BasepGetModuleHandleExW(TRUE,
+        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        lpModuleName,
+        &hModule);
+
+    /* If it wasn't successful - return NULL */
+    if (!Success) hModule = NULL;
+
+    /* Return the handle */
+    return hModule;
+}
+
 ATOM WINAPI
 RegisterClassExWOWW(WNDCLASSEXW* lpwcx,
     LPDWORD pdwWowData,
