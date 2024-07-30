@@ -3017,7 +3017,7 @@ BasepGetModuleHandleExW(BOOLEAN NoLock, DWORD dwPublicFlags, LPCWSTR lpwModuleNa
         // FIXME: Do some redirected DLL stuff?
         if (Redirected)
         {
-            UNIMPLEMENTED;
+            //UNIMPLEMENTED;
         }
 
         if (!hModule)
