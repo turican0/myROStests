@@ -26,9 +26,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="myDCE.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
     <ClInclude Include="supportFunctons.h">
       <Filter>Source Files</Filter>
     </ClInclude>

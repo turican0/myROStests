@@ -11,8 +11,14 @@
  */
 
 //#include "precomp.h"
-#include "supportFunctons.h"
-#include "myDCE.h"
+//#include "supportFunctons.h"
+#include "win32k.h"
+
+HDC GetDCEx(HWND hWnd OPTIONAL, HANDLE ClipRegion, ULONG Flags)
+
+{
+    return NtUserGetDCEx(hWnd, ClipRegion, Flags);
+}
 
 #define DCX_USESTYLE 0x00010000
 

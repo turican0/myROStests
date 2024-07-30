@@ -317,7 +317,6 @@ typedef struct _WNDCLASSA {
 HINSTANCE GetModuleHandleA(const char* lpModuleName) { return 0; };
 HCURSOR LoadCursorA(HINSTANCE hInstance, const char* lpCursorName) { return 0; };
 HBRUSH GetStockObject(int i) { return 0; };
-ATOM RegisterClassA(const WNDCLASSA* lpWndClass) { return 0; };
 
 // Definice typù používaných ve funkcích
 typedef const char* PSTR;
@@ -348,9 +347,7 @@ HWND CreateWindowA(const char* lpClassName,
     HWND hWndParent,
     HMENU hMenu,
     HINSTANCE hInstance,
-    void* lpParam) {
-    return 0;
-};
+    void* lpParam);
 
 // Makra pro IDC_ARROW, WHITE_BRUSH, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT
 #define IDC_ARROW ((const char*)32512)
@@ -366,18 +363,7 @@ HINSTANCE GetModuleHandleA(const char* lpModuleName);
 HCURSOR LoadCursorA(HINSTANCE hInstance, const char* lpCursorName);
 HBRUSH GetStockObject(int i);
 ATOM RegisterClassA(const WNDCLASSA* lpWndClass);
-HWND CreateWindowA(const char* lpClassName,
-    const char* lpWindowName,
-    UINT dwStyle,
-    int x,
-    int y,
-    int nWidth,
-    int nHeight,
-    HWND hWndParent,
-    HMENU hMenu,
-    HINSTANCE hInstance,
-    void* lpParam);
-HDC GetDCEx(HWND hWnd, HRGN hrgnClip, UINT flags) { return 0; };
+HWND CreateWindowA(const char* lpClassName, const char* lpWindowName, UINT dwStyle, int x, int y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, void* lpParam);
 HRGN CreateRectRgn(int left, int top, int right, int bottom) { return 0; };
 int ReleaseDC(HWND hWnd, HDC hDC) { return 0; };
 int CombineRgn(HRGN hrgnDst, HRGN hrgnSrc1, HRGN hrgnSrc2, int fnCombineMode) { return 0; };
@@ -498,10 +484,83 @@ typedef struct _W32PROCESS
 typedef const RECTL* LPCRECTL;
 //typedef void *PVOID;
 
+typedef USHORT RTL_ATOM, * PRTL_ATOM;
+
+#define NB_HOOKS 10
+
+typedef struct _DESKTOPINFO
+{
+    PVOID pvDesktopBase;
+    PVOID pvDesktopLimit;
+    struct _WND* spwnd;
+    DWORD fsHooks;
+    LIST_ENTRY aphkStart[NB_HOOKS];
+
+    HWND hTaskManWindow;
+    HWND hProgmanWindow;
+    HWND hShellWindow;
+    struct _WND* spwndShell;
+    struct _WND* spwndBkGnd;
+
+    struct _PROCESSINFO* ppiShellProcess;
+
+    union
+    {
+        UINT Dummy;
+        struct
+        {
+            UINT LastInputWasKbd : 1;
+        };
+    };
+
+    //WCHAR szDesktopName[1];
+} DESKTOPINFO, * PDESKTOPINFO;
+
+typedef struct _THRDESKHEAD
+{
+    HANDLE h;
+    DWORD cLockObj;
+    struct _THREADINFO* pti;
+    struct _DESKTOP* rpdesk;
+    PVOID pSelf;
+} THRDESKHEAD, * PTHRDESKHEAD;
+
+typedef struct _HEAD
+{
+    HANDLE h;
+    DWORD cLockObj;
+} HEAD, * PHEAD;
+
+typedef struct _PROCDESKHEAD
+{
+    HEAD a;
+    DWORD_PTR hTaskWow;
+    struct _DESKTOP* rpdesk;
+    PVOID pSelf;
+} PROCDESKHEAD, * PPROCDESKHEAD;
+
+typedef enum _GETCPD
+{
+    UserGetCPDA2U = 0x01, /* " Unicode " */
+    UserGetCPDU2A = 0X02, /* " Ansi " */
+    UserGetCPDClass = 0X10,
+    UserGetCPDWindow = 0X20,
+    UserGetCPDDialog = 0X40,
+    UserGetCPDWndtoCls = 0X80
+} GETCPD, * PGETCPD;
+
+typedef struct _CALLPROCDATA
+{
+    PROCDESKHEAD head;
+    struct _CALLPROCDATA* spcpdNext;
+    WNDPROC pfnClientPrevious;
+    GETCPD wType;
+} CALLPROCDATA, * PCALLPROCDATA;
+
 typedef struct _CLS
 {
     struct _CLS* pclsNext;
-    //RTL_ATOM atomClassName;
+    RTL_ATOM atomClassName;
     ATOM atomNVClassName;
     DWORD fnid;
     struct _DESKTOP* rpdeskParent;
@@ -509,7 +568,7 @@ typedef struct _CLS
     DWORD CSF_flags;
     PSTR  lpszClientAnsiMenuName; /* For client use */
     PWSTR lpszClientUnicodeMenuName; /* "   "      " */
-    //PCALLPROCDATA spcpdFirst;
+    PCALLPROCDATA spcpdFirst;
     struct _CLS* pclsBase;
     struct _CLS* pclsClone;
     ULONG cWndReferenceCount;
@@ -529,28 +588,6 @@ typedef struct _CLS
     UINT MenuNameIsString : 1;
     UINT NotUsed : 29;
 } CLS, * PCLS;
-
-typedef struct _HEAD
-{
-    HANDLE h;
-    DWORD cLockObj;
-} HEAD, * PHEAD;
-
-typedef struct _THROBJHEAD
-{
-    HANDLE h;
-    DWORD cLockObj;
-    struct _THREADINFO* pti;
-} THROBJHEAD, * PTHROBJHEAD;
-
-typedef struct _THRDESKHEAD
-{
-    HANDLE h;
-    DWORD cLockObj;
-    struct _THREADINFO* pti;
-    struct _DESKTOP* rpdesk;
-    PVOID pSelf;
-} THRDESKHEAD, * PTHRDESKHEAD;
 
 typedef struct _WND
 {
@@ -628,7 +665,149 @@ typedef struct _WND
     PVOID DialogPointer;
 } WND, * PWND;
 
-typedef int PTHREADINFO;
+typedef struct _DESKTOP
+{
+    /* Must be the first member */
+    DWORD dwSessionId;
+
+    PDESKTOPINFO pDeskInfo;
+    LIST_ENTRY ListEntry;
+    /* Pointer to the associated window station. */
+    struct _WINSTATION_OBJECT* rpwinstaParent;
+    DWORD dwDTFlags;
+    DWORD_PTR dwDesktopId;
+    //PMENU spmenuSys;
+    //PMENU spmenuDialogSys;
+    //PMENU spmenuHScroll;
+    //PMENU spmenuVScroll;
+    PWND spwndForeground;
+    PWND spwndTray;
+    PWND spwndMessage;
+    PWND spwndTooltip;
+    PVOID hsectionDesktop;
+    //PWIN32HEAP pheapDesktop;
+    ULONG_PTR ulHeapSize;
+    LIST_ENTRY PtiList;
+
+    /* One console input thread per desktop, maintained by CONSRV */
+    DWORD dwConsoleThreadId;
+
+    /* Use for tracking mouse moves. */
+    PWND spwndTrack;
+    DWORD htEx;
+    RECT rcMouseHover;
+    DWORD dwMouseHoverTime;
+
+    /* ReactOS */
+    /* Pointer to the active queue. */
+    struct _USER_MESSAGE_QUEUE* ActiveMessageQueue;
+    /* Handle of the desktop window. */
+    HWND DesktopWindow;
+    /* Thread blocking input */
+    PVOID BlockInputThread;
+    LIST_ENTRY ShellHookWindows;
+} DESKTOP, * PDESKTOP;
+
+typedef struct _THROBJHEAD
+{
+    HANDLE h;
+    DWORD cLockObj;
+    struct _THREADINFO* pti;
+} THROBJHEAD, * PTHROBJHEAD;
+
+typedef long FLONG;
+
+typedef UNICODE_STRING* PUNICODE_STRING;
+
+typedef struct _THREADINFO* PTHREADINFO;
+
+typedef int WORD;
+
+#ifdef __cplusplus
+typedef struct _THREADINFO
+{
+#else
+typedef struct _THREADINFO
+{
+    //W32THREAD;
+#endif
+    //PTL                 ptl;
+    PPROCESSINFO        ppi;
+    struct _USER_MESSAGE_QUEUE* MessageQueue;
+    struct tagKL* KeyboardLayout;
+    struct _CLIENTTHREADINFO* pcti;
+    struct _DESKTOP* rpdesk;
+    struct _DESKTOPINFO* pDeskInfo;
+    struct _CLIENTINFO* pClientInfo;
+    FLONG               TIF_flags;
+    PUNICODE_STRING     pstrAppName;
+    struct _USER_SENT_MESSAGE* pusmSent;
+    struct _USER_SENT_MESSAGE* pusmCurrent;
+    /* Queue of messages sent to the queue. */
+    LIST_ENTRY          SentMessagesListHead;    // psmsReceiveList
+    /* Last message time and ID */
+    LONG                timeLast;
+    ULONG_PTR           idLast;
+    /* True if a WM_QUIT message is pending. */
+    BOOLEAN             QuitPosted;
+    /* The quit exit code. */
+    INT                 exitCode;
+    //HDESK               hdesk;
+    UINT                cPaintsReady; /* Count of paints pending. */
+    UINT                cTimersReady; /* Count of timers pending. */
+    struct tagMENUSTATE* pMenuState;
+    DWORD               dwExpWinVer;
+    DWORD               dwCompatFlags;
+    DWORD               dwCompatFlags2;
+    struct _USER_MESSAGE_QUEUE* pqAttach;
+    PTHREADINFO         ptiSibling;
+    ULONG               fsHooks;
+    struct tagHOOK* sphkCurrent;
+    LPARAM              lParamHkCurrent;
+    WPARAM              wParamHkCurrent;
+    struct tagSBTRACK* pSBTrack;
+    /* Set if there are new messages specified by WakeMask in any of the queues. */
+    HANDLE              hEventQueueClient;
+    /* Handle for the above event (in the context of the process owning the queue). */
+    //PKEVENT             pEventQueueServer;
+    LIST_ENTRY          PtiLink;
+    INT                 iCursorLevel;
+    /* Last message cursor position */
+    //POINT               ptLast;
+    /* Input context-related */
+    struct _WND* spwndDefaultIme;
+    struct tagIMC* spDefaultImc;
+    //HKL                 hklPrev;
+
+    INT                 cEnterCount;
+    /* Queue of messages posted to the queue. */
+    LIST_ENTRY          PostedMessagesListHead; // mlPost
+    WORD                fsChangeBitsRemoved;
+    //WCHAR               wchInjected;
+    UINT                cWindows;
+    UINT                cVisWindows;
+#ifndef __cplusplus 
+    LIST_ENTRY          aphkStart[NB_HOOKS];
+    //CLIENTTHREADINFO    cti;  // Used only when no Desktop or pcti NULL.
+
+    /* ReactOS */
+
+    /* Thread Queue state tracking */
+    // Send list QS_SENDMESSAGE
+    // Post list QS_POSTMESSAGE|QS_HOTKEY|QS_PAINT|QS_TIMER|QS_KEY
+    // Hard list QS_MOUSE|QS_KEY only
+    // Accounting of queue bit sets, the rest are flags. QS_TIMER QS_PAINT counts are handled in thread information.
+    //DWORD nCntsQBits[QSIDCOUNTS]; // QS_KEY QS_MOUSEMOVE QS_MOUSEBUTTON QS_POSTMESSAGE QS_SENDMESSAGE QS_HOTKEY
+
+    LIST_ENTRY WindowListHead;
+    LIST_ENTRY W32CallbackListHead;
+    //SINGLE_LIST_ENTRY  ReferencesList;
+    ULONG cExclusiveLocks;
+#if DBG
+    USHORT acExclusiveLockCount[GDIObjTypeTotal + 1];
+#endif
+#endif // __cplusplus
+} THREADINFO;
 
 typedef struct tagDCE
 {
@@ -930,8 +1109,6 @@ co_IntGraphicsCheck(BOOL Create)
     return TRUE;
 }
 
-typedef UNICODE_STRING* PUNICODE_STRING;
-
 #define CONST
 
 typedef struct _devicemodeW {
@@ -1071,8 +1248,6 @@ typedef int HGDIOBJ;
 
 BOOL NTAPI GreDeleteObject(HGDIOBJ hObject) { return FALSE; };
 
-typedef int WORD;
-
 WORD APIENTRY IntGdiSetHookFlags(HDC hDC, WORD Flags) { return 0; };
 
 PWND FASTCALL UserGetWindowObject(HWND hWnd) { return NULL; };
@@ -1096,8 +1271,6 @@ VOID FASTCALL REGION_Delete(PREGION a) {};
 __kernel_entry W32KAPI BOOL APIENTRY NtGdiSelectClipPath(_In_ HDC hdc, _In_ INT iMode) { return FALSE; };
 
 VOID FASTCALL GdiSelectVisRgn(HDC hdc, PREGION prgn) {};
-
-typedef long FLONG;
 
 VOID FASTCALL IntEngWindowChanged(_In_ struct _WND* Window, _In_ FLONG flChanged) {};
 
@@ -1163,6 +1336,7 @@ void KeLeaveCriticalRegion()
 BOOL NTAPI GreIsHandleValid(HGDIOBJ hobj) { return FALSE; };
 
 #define ERR(msg) do { { printf("%s\n", msg); } } while (0)
+#define WARN(msg) do { { printf("%s\n", msg); } } while (0)
 
 #define RemoveHeadList(ListHead) \
     (ListHead)->Flink;\
@@ -1182,6 +1356,14 @@ __kernel_entry W32KAPI HRGN APIENTRY NtGdiCreateRectRgn(_In_ INT xLeft, _In_ INT
 __kernel_entry W32KAPI DWORD APIENTRY NtGdiSetLayout( _In_ HDC hdc, _In_ LONG wox, _In_ DWORD dwLayout) { return 0; };
 
 #define ASSERT(condition) \
+    do { \
+        if (!(condition)) { \
+            printf("Assertion failed: %s, file %s, line %d\n", #condition, __FILE__, __LINE__); \
+            abort(); \
+        } \
+    } while (0)
+
+#define C_ASSERT(condition) \
     do { \
         if (!(condition)) { \
             printf("Assertion failed: %s, file %s, line %d\n", #condition, __FILE__, __LINE__); \
@@ -1323,7 +1505,1571 @@ VOID FASTCALL UserLeave(VOID) {};
 
 HPALETTE NTAPI GdiSelectPalette( _In_ HDC hDC, _In_ HPALETTE hpal, _In_ BOOL ForceBackground) { return FALSE; };
 
+#define DECLSPEC_HOTPATCH
 
+typedef const char* LPCSTR;
+typedef void* LPVOID;
+
+typedef struct tagMDICREATESTRUCTA {
+    LPCSTR szClass;
+    LPCSTR szTitle;
+    HANDLE hOwner;
+    int x;
+    int y;
+    int cx;
+    int cy;
+    DWORD style;
+    LPARAM lParam;
+} MDICREATESTRUCTA, * LPMDICREATESTRUCTA;
+
+BOOL RegisterDefaultClasses;
+
+void RegisterSystemControls() {};
+
+//#define ValidateHwnd(hwnd) ValidateHandle((hwnd), TYPE_WINDOW)
+
+typedef struct _USER_HANDLE_ENTRY
+{
+    void* ptr; /* pointer to object */
+    union
+    {
+        PVOID pi;
+        struct _THREADINFO* pti; /* pointer to Win32ThreadInfo */
+        struct _PROCESSINFO* ppi; /* pointer to W32ProcessInfo */
+    };
+    unsigned char type; /* object type (0 if free) */
+    unsigned char flags;
+    unsigned short generation; /* generation counter */
+} USER_HANDLE_ENTRY, * PUSER_HANDLE_ENTRY;
+
+typedef struct _USER_HANDLE_TABLE
+{
+    PUSER_HANDLE_ENTRY handles;
+    PUSER_HANDLE_ENTRY freelist;
+    int nb_handles;
+    int allocated_handles;
+} USER_HANDLE_TABLE, * PUSER_HANDLE_TABLE;
+
+typedef int PINT;
+typedef int PFN_FNID;
+typedef int PFNCLIENT;
+typedef int PFNCLIENTWORKER;
+typedef int MBSTRING;
+typedef char CHAR;
+#define FNID_NUM 10
+#define FNID_NUMSERVERPROC 10
+#define ICLS_NOTUSED 10
+#define MAX_MB_STRINGS 10
+
+
+typedef struct _WNDMSG
+{
+    DWORD maxMsgs;
+    PINT abMsgs;
+} WNDMSG, * PWNDMSG;
+
+typedef struct tagSERVERINFO
+{
+    DWORD dwSRVIFlags;
+    ULONG_PTR cHandleEntries;
+    PFN_FNID mpFnidPfn[FNID_NUM];
+    WNDPROC aStoCidPfn[FNID_NUMSERVERPROC];
+    USHORT mpFnid_serverCBWndProc[FNID_NUM];
+    PFNCLIENT apfnClientA;
+    PFNCLIENT apfnClientW;
+    PFNCLIENTWORKER apfnClientWorker;
+    ULONG cbHandleTable;
+    ATOM atomSysClass[ICLS_NOTUSED + 1];
+    DWORD dwDefaultHeapBase;
+    DWORD dwDefaultHeapSize;
+    UINT uiShellMsg;
+    MBSTRING MBStrings[MAX_MB_STRINGS];
+    ATOM atomIconSmProp;
+    ATOM atomIconProp;
+    ATOM atomContextHelpIdProp;
+    ATOM atomFrostedWindowProp;
+    CHAR acOemToAnsi[256];
+    CHAR acAnsiToOem[256];
+    DWORD dwInstalledEventHooks;
+    //PERUSERSERVERINFO;
+} SERVERINFO, * PSERVERINFO;
+
+typedef struct _SHAREDINFO
+{
+    PSERVERINFO psi;         /* Global Server Info */
+    PVOID aheList;           /* Handle Entry List */
+    PVOID pDispInfo;         /* Global PDISPLAYINFO pointer */
+    ULONG_PTR ulSharedDelta; /* Shared USER mapped section delta */
+    WNDMSG awmControl[FNID_NUM];
+    WNDMSG DefWindowMsgs;
+    WNDMSG DefWindowSpecMsgs;
+} SHAREDINFO, * PSHAREDINFO;
+
+SHAREDINFO gSharedInfo = { NULL };
+
+#define LOWORD(l)   (l & 0xffff)
+#define HIWORD(l)   (l >> 16)
+
+#define FIRST_USER_HANDLE 0x0020
+
+#define HANDLEENTRY_DESTROY 1
+#define HANDLEENTRY_INDESTROY 2
+
+static PVOID FASTCALL DesktopPtrToUser(PVOID ptr)
+{
+    /*PCLIENTINFO pci = GetWin32ClientInfo();
+    PDESKTOPINFO pdi = pci->pDeskInfo;
+
+    ASSERT(ptr != NULL);
+    ASSERT(pdi != NULL);
+    if (pdi->pvDesktopBase <= ptr && ptr < pdi->pvDesktopLimit)
+        return (PVOID)((ULONG_PTR)ptr - pci->ulClientDelta);
+    else
+        return (PVOID)NtUserCallOneParam((DWORD_PTR)ptr, ONEPARAM_ROUTINE_GETDESKTOPMAPPING);
+        */
+    return ptr;
+}
+
+LPVOID FASTCALL ValidateHandleNoErr(HANDLE hObject, UINT uType)
+{
+    UINT index;
+    PUSER_HANDLE_TABLE ht;
+    PUSER_HANDLE_ENTRY he;
+    WORD generation;
+    LPVOID ptr;
+
+    /*if (!NtUserValidateHandleSecure(hObject))
+    {
+        WARN("Not a handle\n");
+        return NULL;
+    }*/
+
+    ht = (PUSER_HANDLE_TABLE)gSharedInfo.aheList; /* handle table */
+    ASSERT(ht);
+    /* ReactOS-Specific! */
+    ASSERT(gSharedInfo.ulSharedDelta != 0);
+    he = (PUSER_HANDLE_ENTRY)((ULONG_PTR)ht->handles - gSharedInfo.ulSharedDelta);
+
+    index = (LOWORD((int)hObject) - FIRST_USER_HANDLE) >> 1;
+    if ((INT)index < 0 || ht->nb_handles <= index || he[index].type != uType)
+        return NULL;
+
+    if (he[index].flags & HANDLEENTRY_DESTROY)
+        return NULL;
+
+    generation = HIWORD((int)hObject);
+    if (generation != he[index].generation && generation && generation != 0xFFFF)
+        return NULL;
+
+    ptr = he[index].ptr;
+    if (ptr)
+        ptr = DesktopPtrToUser((PVOID)ptr);
+
+    return ptr;
+}
+
+LPVOID FASTCALL ValidateHandle(HANDLE hObject, UINT uType)
+{
+    LPVOID pvObj = ValidateHandleNoErr(hObject, uType);
+    if (pvObj)
+        return pvObj;
+
+    /*if (uType == TYPE_WINDOW)
+        SetLastError(ERROR_INVALID_WINDOW_HANDLE);
+    else
+        SetLastError(ERROR_INVALID_HANDLE);*/
+    return NULL;
+}
+
+#define FNID_FIRST                  0x029A
+#define FNID_SCROLLBAR              0x029A
+#define FNID_ICONTITLE              0x029B
+#define FNID_MENU                   0x029C
+#define FNID_DESKTOP                0x029D
+#define FNID_DEFWINDOWPROC          0x029E
+#define FNID_MESSAGEWND             0x029F
+#define FNID_SWITCH                 0x02A0
+#define FNID_BUTTON                 0x02A1
+#define FNID_COMBOBOX               0x02A2
+#define FNID_COMBOLBOX              0x02A3
+#define FNID_DIALOG                 0x02A4
+#define FNID_EDIT                   0x02A5
+#define FNID_LISTBOX                0x02A6
+#define FNID_MDICLIENT              0x02A7
+#define FNID_STATIC                 0x02A8
+#define FNID_IME                    0x02A9
+#define FNID_GHOST                  0x02AA
+#define FNID_CALLWNDPROC            0x02AB
+#define FNID_CALLWNDPROCRET         0x02AC
+#define FNID_HKINLPCWPEXSTRUCT      0x02AD
+#define FNID_HKINLPCWPRETEXSTRUCT   0x02AE
+#define FNID_MB_DLGPROC             0x02AF
+#define FNID_MDIACTIVATEDLGPROC     0x02B0
+#define FNID_SENDMESSAGE            0x02B1
+#define FNID_SENDMESSAGEFF          0x02B2
+/* Kernel has option to use TimeOut or normal msg send, based on type of msg. */
+#define FNID_SENDMESSAGEWTOOPTION   0x02B3
+#define FNID_SENDMESSAGECALLPROC    0x02B4
+#define FNID_BROADCASTSYSTEMMESSAGE 0x02B5
+#define FNID_TOOLTIPS               0x02B6
+#define FNID_SENDNOTIFYMESSAGE      0x02B7
+#define FNID_SENDMESSAGECALLBACK    0x02B8
+
+#define MDIS_ALLCHILDSTYLES	1
+
+#define MFT_BITMAP 4
+#define MFT_MENUBARBREAK 32
+#define MFT_MENUBREAK 64
+#define MFT_OWNERDRAW 256
+#define MFT_RADIOCHECK 512
+#define MFT_RIGHTJUSTIFY 0x4000
+#define MFT_SEPARATOR 0x800
+#define MFT_RIGHTORDER 0x2000L
+#define MFT_STRING 0
+#define MFS_CHECKED 8
+#define MFS_DEFAULT 4096
+#define MFS_DISABLED 3
+#define MFS_ENABLED 0
+#define MFS_GRAYED 3
+#define MFS_HILITE 128
+#define MFS_UNCHECKED 0
+#define MFS_UNHILITE 0
+#define MNS_NOCHECK 0x80000000
+#define MNS_MODELESS 0x40000000
+#define MNS_DRAGDROP 0x20000000
+#define MNS_AUTODISMISS 0x10000000
+#define MNS_NOTIFYBYPOS 0x08000000
+#define MNS_CHECKORBMP 0x04000000
+#define GW_HWNDNEXT 2
+#define GW_HWNDPREV 3
+#define GW_CHILD 5
+#define GW_HWNDFIRST 0
+#define GW_HWNDLAST 1
+#define GW_OWNER 4
+#define GW_ENABLEDPOPUP 6
+#define SW_HIDE 0
+#define SW_NORMAL 1
+#define SW_SHOWNORMAL 1
+#define SW_SHOWMINIMIZED 2
+#define SW_MAXIMIZE 3
+#define SW_SHOWMAXIMIZED 3
+#define SW_SHOWNOACTIVATE 4
+#define SW_SHOW 5
+#define SW_MINIMIZE 6
+#define SW_SHOWMINNOACTIVE 7
+#define SW_SHOWNA 8
+#define SW_RESTORE 9
+#define SW_SHOWDEFAULT 10
+#define SW_FORCEMINIMIZE 11
+#define SW_MAX 11
+#define MB_USERICON 128
+#define MB_ICONASTERISK 64
+#define MB_ICONEXCLAMATION 0x30
+#define MB_ICONWARNING 0x30
+#define MB_ICONERROR 16
+#define MB_ICONHAND 16
+#define MB_ICONQUESTION 32
+#define MB_OK 0
+#define MB_ABORTRETRYIGNORE 2
+#define MB_APPLMODAL 0
+#define MB_DEFAULT_DESKTOP_ONLY 0x20000
+#define MB_HELP 0x4000
+#define MB_RIGHT 0x80000
+#define MB_RTLREADING 0x100000
+#define MB_TOPMOST 0x40000
+#define MB_DEFBUTTON1 0
+#define MB_DEFBUTTON2 256
+#define MB_DEFBUTTON3 512
+#define MB_DEFBUTTON4 0x300
+#define MB_ICONINFORMATION 64
+#define MB_ICONSTOP 16
+#define MB_OKCANCEL 1
+#define MB_RETRYCANCEL 5
+
+#define WM_NULL 0
+#define WM_CREATE 1
+#define WM_DESTROY 2
+#define WM_MOVE 3
+#define WM_SIZE 5
+#define WM_ACTIVATE 6
+#define WM_SETFOCUS 7
+#define WM_KILLFOCUS 8
+#define WM_ENABLE 10
+#define WM_SETREDRAW 11
+#define WM_SETTEXT 12
+#define WM_GETTEXT 13
+#define WM_GETTEXTLENGTH 14
+#define WM_PAINT 15
+#define WM_CLOSE 16
+#define WM_QUERYENDSESSION 17
+#define WM_QUIT 18
+#define WM_QUERYOPEN 19
+#define WM_ERASEBKGND 20
+#define WM_SYSCOLORCHANGE 21
+#define WM_ENDSESSION 22
+#define WM_SHOWWINDOW 24
+#define WM_SETTINGCHANGE 26
+#define WM_WININICHANGE 26
+#define WM_DEVMODECHANGE 27
+#define WM_ACTIVATEAPP 28
+#define WM_FONTCHANGE 29
+#define WM_TIMECHANGE 30
+#define WM_CANCELMODE 31
+#define WM_SETCURSOR 32
+#define WM_MOUSEACTIVATE 33
+#define WM_CHILDACTIVATE 34
+#define WM_QUEUESYNC 35
+#define WM_GETMINMAXINFO 36
+#define WM_PAINTICON 38
+#define WM_ICONERASEBKGND 39
+#define WM_NEXTDLGCTL 40
+#define WM_SPOOLERSTATUS 42
+#define WM_DRAWITEM 43
+#define WM_MEASUREITEM 44
+#define WM_DELETEITEM 45
+#define WM_VKEYTOITEM 46
+#define WM_CHARTOITEM 47
+#define WM_SETFONT 48
+#define WM_GETFONT 49
+#define WM_SETHOTKEY 50
+#define WM_GETHOTKEY 51
+#define WM_QUERYDRAGICON 55
+#define WM_COMPAREITEM 57
+
+#define CW_USEDEFAULT16 0x8000
+
+#define NUCWE_ANSI       0x00000001
+
+#define GetWindowLongPtrW GetWindowLongW
+
+#define GWL_EXSTYLE (-20)
+#define GWL_STYLE (-16)
+#define GWL_WNDPROC (-4)
+#define GWLP_WNDPROC (-4)
+#define GWL_HINSTANCE (-6)
+#define GWLP_HINSTANCE (-6)
+#define GWL_HWNDPARENT (-8)
+#define GWLP_HWNDPARENT (-8)
+#define GWL_ID (-12)
+#define GWLP_ID (-12)
+#define GWL_USERDATA (-21)
+#define GWLP_USERDATA (-21)
+
+#define GA_PARENT 1
+#define GA_ROOT 2
+#define GA_ROOTOWNER 3
+typedef char* PCHAR;
+
+PWND FASTCALL
+IntGetParent(PWND Wnd)
+{
+    if (Wnd->style & WS_POPUP)
+    {
+        return Wnd->spwndOwner;
+    }
+    else if (Wnd->style & WS_CHILD)
+    {
+        return Wnd->spwndParent;
+    }
+
+    return NULL;
+}
+
+#define IntIsDesktopWindow(WndObj) \
+  (WndObj->spwndParent == NULL)
+
+PWND FASTCALL UserGetAncestor(PWND Wnd, UINT Type)
+{
+    PWND WndAncestor, Parent;
+
+    if (UserHMGetHandle(Wnd) == IntGetDesktopWindow())
+    {
+        return NULL;
+    }
+
+    switch (Type)
+    {
+    case GA_PARENT:
+    {
+        WndAncestor = Wnd->spwndParent;
+        break;
+    }
+
+    case GA_ROOT:
+    {
+        WndAncestor = Wnd;
+        Parent = NULL;
+
+        for (;;)
+        {
+            if (!(Parent = WndAncestor->spwndParent))
+            {
+                break;
+            }
+            if (IntIsDesktopWindow(Parent))
+            {
+                break;
+            }
+
+            WndAncestor = Parent;
+        }
+        break;
+    }
+
+    case GA_ROOTOWNER:
+    {
+        WndAncestor = Wnd;
+
+        for (;;)
+        {
+            Parent = IntGetParent(WndAncestor);
+
+            if (!Parent)
+            {
+                break;
+            }
+
+            WndAncestor = Parent;
+        }
+        break;
+    }
+
+    default:
+    {
+        return NULL;
+    }
+    }
+
+    return WndAncestor;
+}
+
+HWND APIENTRY
+NtUserGetAncestor(HWND hWnd, UINT Type)
+{
+    PWND Window, Ancestor;
+    HWND Ret = NULL;
+
+    TRACE("Enter NtUserGetAncestor\n");
+    UserEnterExclusive();
+
+    Window = UserGetWindowObject(hWnd);
+    if (Window)
+    {
+        Ancestor = UserGetAncestor(Window, Type);
+        /* fixme: can UserGetAncestor ever return NULL for a valid window? */
+
+        Ret = (Ancestor ? UserHMGetHandle(Ancestor) : NULL);
+    }
+
+    TRACE("Leave NtUserGetAncestor, ret=%p\n", Ret);
+    UserLeave();
+    return Ret;
+}
+
+typedef struct _CLIENTINFO
+{
+    ULONG_PTR CI_flags;
+    ULONG_PTR cSpins;
+    DWORD dwExpWinVer;
+    DWORD dwCompatFlags;
+    DWORD dwCompatFlags2;
+    DWORD dwTIFlags; /* ThreadInfo TIF_Xxx flags for User space. */
+    PDESKTOPINFO pDeskInfo;
+    ULONG_PTR ulClientDelta;
+    //PHOOK phkCurrent;
+    ULONG fsHooks;
+    //CALLBACKWND CallbackWnd;
+    DWORD dwHookCurrent;
+    INT cInDDEMLCallback;
+    //PCLIENTTHREADINFO pClientThreadInfo;
+    ULONG_PTR dwHookData;
+    DWORD dwKeyCache;
+    //BYTE afKeyState[8];
+    DWORD dwAsyncKeyCache;
+    //BYTE afAsyncKeyState[8];
+    //BYTE afAsyncKeyStateRecentDow[8];
+    //HKL hKL;
+    USHORT CodePage;
+    UCHAR achDbcsCF[2];
+    //MSG msgDbcsCB;
+    //LPDWORD lpdwRegisteredClasses;
+    ULONG Win32ClientInfo3[26];
+    /* It's just a pointer reference not to be used w the structure in user space. */
+    struct _PROCESSINFO* ppi;
+} CLIENTINFO, * PCLIENTINFO;
+
+//#define GetWin32ClientInfo() ((PCLIENTINFO)(NtCurrentTeb()->Win32ClientInfo))
+#define GetWin32ClientInfo() ((PCLIENTINFO)(NULL))
+
+static __inline PDESKTOPINFO
+GetThreadDesktopInfo(VOID)
+{
+    PTHREADINFO ti;
+    PDESKTOPINFO di = NULL;
+
+    ti = (PTHREADINFO)GetW32ThreadInfo();
+    if (ti != NULL)
+        di = GetWin32ClientInfo()->pDeskInfo;
+
+    return di;
+}
+
+PWND
+FASTCALL
+GetThreadDesktopWnd(VOID)
+{
+    PWND Wnd = GetThreadDesktopInfo()->spwnd;
+    if (Wnd != NULL)
+        Wnd = (PWND)DesktopPtrToUser((PVOID)Wnd);
+    return Wnd;
+}
+
+HWND WINAPI
+GetDesktopWindow(VOID)
+{
+    PWND Wnd;
+    HWND Ret = NULL;
+
+    //_SEH2_TRY
+    {
+        Wnd = GetThreadDesktopWnd();
+        if (Wnd != NULL)
+            Ret = UserHMGetHandle(Wnd);
+    }
+        //_SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        /* Do nothing */
+    }
+    //_SEH2_END;
+
+    return Ret;
+}
+
+BOOL
+FASTCALL
+TestWindowProcess(PWND Wnd)
+{
+    return TRUE;
+    /*if (Wnd->head.pti == (PTHREADINFO)NtCurrentTeb()->Win32ThreadInfo)
+        return TRUE;
+    else
+        return (NtUserQueryWindow(Wnd->head.h, QUERY_WINDOW_UNIQUE_PROCESS_ID) ==
+            (DWORD_PTR)NtCurrentTeb()->ClientId.UniqueProcess);*/
+}
+
+#define WNDS_HASMENU                 0X00000001
+#define WNDS_HASVERTICALSCROOLLBAR   0X00000002
+#define WNDS_HASHORIZONTALSCROLLBAR  0X00000004
+#define WNDS_HASCAPTION              0X00000008
+#define WNDS_SENDSIZEMOVEMSGS        0X00000010
+#define WNDS_MSGBOX                  0X00000020
+#define WNDS_ACTIVEFRAME             0X00000040
+#define WNDS_HASSPB                  0X00000080
+#define WNDS_NONCPAINT               0X00000100
+#define WNDS_SENDERASEBACKGROUND     0X00000200
+#define WNDS_ERASEBACKGROUND         0X00000400
+#define WNDS_SENDNCPAINT             0X00000800
+#define WNDS_INTERNALPAINT           0X00001000
+#define WNDS_UPDATEDIRTY             0X00002000
+#define WNDS_HIDDENPOPUP             0X00004000
+#define WNDS_FORCEMENUDRAW           0X00008000
+#define WNDS_DIALOGWINDOW            0X00010000
+#define WNDS_HASCREATESTRUCTNAME     0X00020000
+#define WNDS_SERVERSIDEWINDOWPROC    0x00040000 /* Call proc inside win32k. */
+#define WNDS_ANSIWINDOWPROC          0x00080000
+#define WNDS_BEINGACTIVATED          0x00100000
+#define WNDS_HASPALETTE              0x00200000
+#define WNDS_PAINTNOTPROCESSED       0x00400000
+#define WNDS_SYNCPAINTPENDING        0x00800000
+#define WNDS_RECEIVEDQUERYSUSPENDMSG 0x01000000
+#define WNDS_RECEIVEDSUSPENDMSG      0x02000000
+#define WNDS_TOGGLETOPMOST           0x04000000
+#define WNDS_REDRAWIFHUNG            0x08000000
+#define WNDS_REDRAWFRAMEIFHUNG       0x10000000
+#define WNDS_ANSICREATOR             0x20000000
+#define WNDS_MAXIMIZESTOMONITOR      0x40000000
+#define WNDS_DESTROYED               0x80000000
+
+//#define GETPFNSERVER(fnid) gpsi->aStoCidPfn[fnid - FNID_FIRST]
+#define GETPFNSERVER(fnid) NULL
+
+/*
+#define GETPFNCLIENTA(fnid) \
+ (WNDPROC)(*(((ULONG_PTR *)&gpsi->apfnClientA) + (fnid - FNID_FIRST)))
+#define GETPFNCLIENTW(fnid) \
+ (WNDPROC)(*(((ULONG_PTR *)&gpsi->apfnClientW) + (fnid - FNID_FIRST)))
+*/
+#define GETPFNCLIENTA(fnid) NULL
+#define GETPFNCLIENTW(fnid) NULL
+
+#define NTKERNELAPI
+
+NTKERNELAPI PVOID NTAPI PsGetCurrentThreadWin32Thread(VOID) {
+    return NULL;
+};
+
+PCALLPROCDATA
+FASTCALL
+UserSearchForCallProc(
+    PCALLPROCDATA pcpd,
+    WNDPROC WndProc,
+    GETCPD Type)
+{
+    while (pcpd && (pcpd->pfnClientPrevious != WndProc || pcpd->wType != Type))
+    {
+        pcpd = pcpd->spcpdNext;
+    }
+    return pcpd;
+}
+
+PCALLPROCDATA
+CreateCallProc(IN PDESKTOP Desktop,
+    IN WNDPROC WndProc,
+    IN BOOL Unicode,
+    IN PPROCESSINFO pi)
+{
+    PCALLPROCDATA NewCallProc;
+    HANDLE Handle;
+
+    /*
+    // We can send any thread pointer to the object manager here,
+    // What's important is the process info
+    NewCallProc = (PCALLPROCDATA)UserCreateObject(gHandleTable,
+        Desktop,
+        pi->ptiList,
+        &Handle,
+        TYPE_CALLPROC,
+        sizeof(CALLPROCDATA));
+    if (NewCallProc != NULL)
+    {
+        NewCallProc->pfnClientPrevious = WndProc;
+        NewCallProc->wType |= Unicode ? UserGetCPDA2U : UserGetCPDU2A;
+        NewCallProc->spcpdNext = NULL;
+
+        // Release the extra reference (UserCreateObject added 2 references)
+        UserDereferenceObject(NewCallProc);
+    }
+    */
+    NewCallProc = NULL;
+
+    return NewCallProc;
+}
+
+void InterlockedExchangePointer(PVOID* a, PCALLPROCDATA b) {};
+
+WNDPROC
+GetCallProcHandle(IN PCALLPROCDATA CallProc)
+{
+    /* FIXME: Check for 64 bit architectures... */
+    //return (WNDPROC)((ULONG_PTR)UserHMGetHandle(CallProc) | 0xFFFF0000);
+    return NULL;
+}
+
+ULONG_PTR
+FASTCALL
+UserGetCPD(
+    PVOID pvClsWnd,
+    GETCPD Flags,
+    ULONG_PTR ProcIn)
+{
+    PCLS pCls;
+    PWND pWnd;
+    PDESKTOP pDesk;
+    PCALLPROCDATA CallProc = NULL;
+    PTHREADINFO pti;
+
+    pti = (PTHREADINFO)PsGetCurrentThreadWin32Thread();
+
+    if (Flags & (UserGetCPDWindow | UserGetCPDDialog) ||
+        Flags & UserGetCPDWndtoCls)
+    {
+        pWnd = (PWND)pvClsWnd;
+        pCls = pWnd->pcls;
+    }
+    else
+        pCls = (PCLS)pvClsWnd;
+
+    // Search Class call proc data list.
+    if (pCls->spcpdFirst)
+        CallProc = UserSearchForCallProc(pCls->spcpdFirst, (WNDPROC)ProcIn, Flags);
+
+    // No luck, create a new one for the requested proc.
+    if (!CallProc)
+    {
+        if (!pCls->rpdeskParent)
+        {
+            TRACE("Null DESKTOP Atom %u\n", pCls->atomClassName);
+            pDesk = pti->rpdesk;
+        }
+        else
+            pDesk = pCls->rpdeskParent;
+        CallProc = CreateCallProc(pDesk,
+            (WNDPROC)ProcIn,
+            !!(Flags & UserGetCPDA2U),
+            pti->ppi);
+        if (CallProc)
+        {
+            CallProc->spcpdNext = pCls->spcpdFirst;
+            (void)InterlockedExchangePointer((PVOID*)&pCls->spcpdFirst,
+                CallProc);
+            CallProc->wType = Flags;
+        }
+    }
+    return (ULONG_PTR)(CallProc ? GetCallProcHandle(CallProc) : NULL);
+}
+
+APIENTRY
+int NtUserGetCPD(
+    HWND hWnd,
+    GETCPD Flags,
+    ULONG_PTR ProcIn)
+{
+    PWND Wnd;
+    ULONG_PTR Result = 0;
+
+    UserEnterExclusive();
+    if (!(Wnd = UserGetWindowObject(hWnd)))
+    {
+        goto Cleanup;
+    }
+
+    // Processing Window only from User space.
+    if ((Flags & ~(UserGetCPDU2A | UserGetCPDA2U)) != UserGetCPDClass)
+        Result = UserGetCPD((PVOID)Wnd, Flags, ProcIn);
+
+Cleanup:
+    UserLeave();
+    return Result;
+}
+
+WNDPROC FASTCALL
+IntGetWndProc(PWND pWnd, BOOL Ansi)
+{
+    INT i;
+    WNDPROC gcpd, Ret = 0;
+    PCLS Class = (PCLS)DesktopPtrToUser((PVOID)pWnd->pcls);
+
+    if (!Class) return Ret;
+
+    if (pWnd->state & WNDS_SERVERSIDEWINDOWPROC)
+    {
+        for (i = FNID_FIRST; i <= FNID_SWITCH; i++)
+        {
+            if (GETPFNSERVER(i) == pWnd->lpfnWndProc)
+            {
+                if (Ansi)
+                    Ret = GETPFNCLIENTA(i);
+                else
+                    Ret = GETPFNCLIENTW(i);
+            }
+        }
+        return Ret;
+    }
+    // Wine Class tests:
+    /*  Edit controls are special - they return a wndproc handle when
+        GetWindowLongPtr is called with a different A/W.
+        On the other hand there is no W->A->W conversion so this control
+        is treated specially.
+     */
+    if (Class->fnid == FNID_EDIT)
+        Ret = pWnd->lpfnWndProc;
+    else
+    {
+        // Set return proc.
+        Ret = pWnd->lpfnWndProc;
+
+        if (Class->fnid <= FNID_GHOST && Class->fnid >= FNID_BUTTON)
+        {
+            if (Ansi)
+            {
+                if (GETPFNCLIENTW(Class->fnid) == pWnd->lpfnWndProc)
+                    Ret = GETPFNCLIENTA(Class->fnid);
+            }
+            else
+            {
+                if (GETPFNCLIENTA(Class->fnid) == pWnd->lpfnWndProc)
+                    Ret = GETPFNCLIENTW(Class->fnid);
+            }
+        }
+        // Return on the change.
+        if (Ret != pWnd->lpfnWndProc)
+            return Ret;
+    }
+
+    if (Ansi == !!(pWnd->state & WNDS_ANSIWINDOWPROC))
+        return Ret;
+
+    gcpd = (WNDPROC)NtUserGetCPD(UserHMGetHandle(pWnd),
+        (GETCPD)((Ansi ? UserGetCPDA2U : UserGetCPDU2A) | UserGetCPDWindow),
+        (ULONG_PTR)Ret);
+
+    return (gcpd ? gcpd : Ret);
+}
+
+HWND WINAPI
+GetWindow(HWND hWnd,
+    UINT uCmd)
+{
+    PWND Wnd, FoundWnd;
+    HWND Ret = NULL;
+
+    //Wnd = ValidateHwnd(hWnd);
+    Wnd = (PWND)ValidateHandle(hWnd, 0);
+    if (!Wnd)
+        return NULL;
+
+    //_SEH2_TRY
+    {
+        FoundWnd = NULL;
+        switch (uCmd)
+        {
+        case GW_OWNER:
+            if (Wnd->spwndOwner != NULL)
+                FoundWnd = (PWND)DesktopPtrToUser((PVOID)Wnd->spwndOwner);
+            break;
+
+        case GW_HWNDFIRST:
+            if (Wnd->spwndParent != NULL)
+            {
+                FoundWnd = (PWND)DesktopPtrToUser((PVOID)Wnd->spwndParent);
+                if (FoundWnd->spwndChild != NULL)
+                    FoundWnd = (PWND)DesktopPtrToUser((PVOID)FoundWnd->spwndChild);
+            }
+            break;
+        case GW_HWNDNEXT:
+            if (Wnd->spwndNext != NULL)
+                FoundWnd = (PWND)DesktopPtrToUser((PVOID)Wnd->spwndNext);
+            break;
+
+        case GW_HWNDPREV:
+            if (Wnd->spwndPrev != NULL)
+                FoundWnd = (PWND)DesktopPtrToUser((PVOID)Wnd->spwndPrev);
+            break;
+
+        case GW_CHILD:
+            if (Wnd->spwndChild != NULL)
+                FoundWnd = (PWND)DesktopPtrToUser((PVOID)Wnd->spwndChild);
+            break;
+
+        case GW_HWNDLAST:
+            FoundWnd = Wnd;
+            while (FoundWnd->spwndNext != NULL)
+                FoundWnd = (PWND)DesktopPtrToUser((PVOID)FoundWnd->spwndNext);
+            break;
+
+        default:
+            Wnd = NULL;
+            break;
+        }
+
+        if (FoundWnd != NULL)
+            Ret = UserHMGetHandle(FoundWnd);
+    }
+    //_SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        /* Do nothing */
+    }
+    //_SEH2_END;
+
+    return Ret;
+}
+
+LONG_PTR IntGetWindowLong(HWND hwnd, INT offset, UINT size, BOOL unicode)
+{
+    LONG_PTR retvalue = 0;
+    WND* wndPtr;
+
+    if (offset == GWLP_HWNDPARENT)
+    {
+        HWND parent = NtUserGetAncestor(hwnd, GA_PARENT);
+        if (parent == GetDesktopWindow()) parent = GetWindow(hwnd, GW_OWNER);
+        return (ULONG_PTR)parent;
+    }
+
+    if (!(wndPtr = (WND*)ValidateHandle(hwnd, 0)))
+    {
+        //SetLastError(ERROR_INVALID_WINDOW_HANDLE);
+        return 0;
+    }
+
+    if (offset >= 0 && wndPtr->fnid != FNID_DESKTOP)
+    {
+        if (offset > (int)(wndPtr->cbwndExtra - size))
+        {
+            WARN("Invalid offset %d\n", offset);
+            //SetLastError(ERROR_INVALID_INDEX);
+            return 0;
+        }
+        retvalue = *((LONG_PTR*)((PCHAR)(wndPtr + 1) + offset));
+
+        /* WINE: special case for dialog window procedure */
+        //if ((offset == DWLP_DLGPROC) && (size == sizeof(LONG_PTR)) && (wndPtr->flags & WIN_ISDIALOG))
+        //    retvalue = (LONG_PTR)IntGetWndProc( (WNDPROC)retvalue, unicode );
+        return retvalue;
+    }
+
+    switch (offset)
+    {
+    case GWLP_USERDATA:  retvalue = wndPtr->dwUserData; break;
+    case GWL_STYLE:      retvalue = wndPtr->style; break;
+    case GWL_EXSTYLE:    retvalue = wndPtr->ExStyle; break;
+    case GWLP_ID:        retvalue = wndPtr->IDMenu; break;
+    case GWLP_HINSTANCE: retvalue = (ULONG_PTR)wndPtr->hModule; break;
+#if 0
+        /* -1 is an undocumented case which returns WW* */
+        /* source: http://www.geoffchappell.com/studies/windows/win32/user32/structs/wnd/index.htm*/
+    case -1:             retvalue = (ULONG_PTR)&wndPtr->ww; break;
+#else
+        /* We don't have a WW but WND already contains the same fields in the right order, */
+        /* so we can return a pointer to its first field */
+    case -1:             retvalue = (ULONG_PTR)&wndPtr->state; break;
+#endif
+    case GWLP_WNDPROC:
+    {
+        if (!TestWindowProcess(wndPtr))
+        {
+            //SetLastError(ERROR_ACCESS_DENIED);
+            retvalue = 0;
+            ERR("Outside Access and Denied!\n");
+            break;
+        }
+        retvalue = (ULONG_PTR)IntGetWndProc(wndPtr, !unicode);
+        break;
+    }
+    default:
+        WARN("Unknown offset %d\n", offset);
+        //SetLastError(ERROR_INVALID_INDEX);
+        break;
+    }
+    return retvalue;
+
+}
+
+LONG
+WINAPI
+GetWindowLongW(HWND hWnd, int nIndex)
+{
+    return IntGetWindowLong(hWnd, nIndex, sizeof(LONG), TRUE);
+}
+
+#define GWL_STYLE (-16)
+
+BOOL WINAPI
+IsZoomed(HWND hWnd)
+{
+    return (GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_MAXIMIZE) != 0;
+}
+
+static inline void* UlongToHandle(const long h)
+{
+    return((void*)(UINT_PTR)h);
+}
+
+typedef struct _LARGE_STRING
+{
+    ULONG Length;
+    ULONG MaximumLength : 31;
+    ULONG bAnsi : 1;
+    PVOID Buffer;
+} LARGE_STRING, * PLARGE_STRING;
+
+/*
+UNICODE_STRING initUNICODE_STRING() {
+    UNICODE_STRING result;
+    //result.Length = (uint16_t)(wcslen(text) * sizeof(wchar_t));
+    //result.MaximumLength = (uint16_t)((wcslen(text) + 1) * sizeof(wchar_t));
+    //result.Buffer = (PWSTR)text;
+    return result;
+}
+
+LARGE_STRING initLARGE_STRING(wchar_t* text) {
+    LARGE_STRING result;
+    result.Length = (uint16_t)(wcslen(text) * sizeof(wchar_t));
+    result.MaximumLength = (uint16_t)((wcslen(text) + 1) * sizeof(wchar_t));
+    result.bAnsi = 1;
+    result.Buffer = (PVOID)text;
+    return result;
+}*/
+
+typedef struct _WNDCLASSEXA {
+    UINT cbSize;
+    UINT style;
+    WNDPROC lpfnWndProc;
+    int cbClsExtra;
+    int cbWndExtra;
+    HINSTANCE hInstance;
+    HICON hIcon;
+    HCURSOR hCursor;
+    HBRUSH hbrBackground;
+    LPCSTR lpszMenuName;
+    LPCSTR lpszClassName;
+    HICON hIconSm;
+} WNDCLASSEXA, * LPWNDCLASSEXA, * PWNDCLASSEXA;
+
+HWND WINAPI
+User32CreateWindowEx(DWORD dwExStyle,
+    LPCSTR lpClassName,
+    LPCSTR lpWindowName,
+    DWORD dwStyle,
+    int x,
+    int y,
+    int nWidth,
+    int nHeight,
+    HWND hWndParent,
+    HMENU hMenu,
+    HINSTANCE hInstance,
+    LPVOID lpParam,
+    DWORD dwFlags)
+{
+    //LARGE_STRING WindowName = initLARGE_STRING((wchar_t*)L"WinName");
+    LARGE_STRING lstrClassName, * plstrClassName;
+    LARGE_STRING lstrClassVersion, * plstrClassVersion;
+    //UNICODE_STRING ClassName = initUNICODE_STRING();
+    //UNICODE_STRING ClassVersion = initUNICODE_STRING();
+    //WNDCLASSEXA wceA;
+    //WNDCLASSEXW wceW;
+    //HMODULE hLibModule = NULL;
+    DWORD dwLastError;
+    BOOL Unicode, ClassFound = FALSE;
+    HWND Handle = NULL;
+    //LPCWSTR lpszClsVersion;
+    //LPCWSTR lpLibFileName = NULL;
+    HANDLE pCtx = NULL;
+    DWORD dwFlagsVer;
+
+#if 0
+    DbgPrint("[window] User32CreateWindowEx style %d, exstyle %d, parent %d\n", dwStyle, dwExStyle, hWndParent);
+#endif
+    
+    //dwFlagsVer = RtlGetExpWinVer(hInstance ? hInstance : GetModuleHandleW(NULL));
+    //TRACE("Module Version %x\n", dwFlagsVer);
+
+    if (!RegisterDefaultClasses)
+    {
+        TRACE("RegisterSystemControls\n");
+        RegisterSystemControls();
+    }
+
+    Unicode = !(dwFlags & NUCWE_ANSI);
+
+    //if (IS_ATOM(lpClassName))
+    {
+        //plstrClassName = (PVOID)lpClassName;
+    }
+    //else
+    {
+        if (Unicode)
+        {
+            //RtlInitUnicodeString(&ClassName, (PCWSTR)lpClassName);
+        }
+        else
+        {
+            //if (!RtlCreateUnicodeStringFromAsciiz(&ClassName, (PCSZ)lpClassName))
+            {
+                //SetLastError(ERROR_OUTOFMEMORY);
+                return NULL;
+            }
+        }
+
+        /* Copy it to a LARGE_STRING */
+        //lstrClassName.Buffer = ClassName.Buffer;
+        //lstrClassName.Length = ClassName.Length;
+        //lstrClassName.MaximumLength = ClassName.MaximumLength;
+        //plstrClassName = &lstrClassName;
+    }
+
+    /* Initialize a LARGE_STRING */
+    //RtlInitLargeString(&WindowName, lpWindowName, Unicode);
+
+    // HACK: The current implementation expects the Window name to be UNICODE
+    if (!Unicode)
+    {
+        NTSTATUS Status;
+        //PSTR AnsiBuffer = WindowName.Buffer;
+        //ULONG AnsiLength = WindowName.Length;
+
+        //WindowName.Length = 0;
+        //WindowName.MaximumLength = AnsiLength * sizeof(WCHAR);
+        /*WindowName.Buffer = RtlAllocateHeap(RtlGetProcessHeap(),
+            0,
+            WindowName.MaximumLength);*/
+        //if (!WindowName.Buffer)
+        {
+            //SetLastError(ERROR_OUTOFMEMORY);
+            //goto cleanup;
+        }
+
+        /*Status = RtlMultiByteToUnicodeN(WindowName.Buffer,
+            WindowName.MaximumLength,
+            &WindowName.Length,
+            AnsiBuffer,
+            AnsiLength);*/
+        //if (!NT_SUCCESS(Status))
+        {
+            //goto cleanup;
+        }
+    }
+
+    if (!hMenu && (dwStyle & (WS_OVERLAPPEDWINDOW | WS_POPUP)))
+    {
+        if (Unicode)
+        {
+            //wceW.cbSize = sizeof(wceW);
+            //if (GetClassInfoExW(hInstance, (LPCWSTR)lpClassName, &wceW) && wceW.lpszMenuName)
+            {
+                //hMenu = LoadMenuW(hInstance, wceW.lpszMenuName);
+            }
+        }
+        else
+        {
+            //wceA.cbSize = sizeof(wceA);
+            //if (GetClassInfoExA(hInstance, lpClassName, &wceA) && wceA.lpszMenuName)
+            {
+                //hMenu = LoadMenuA(hInstance, wceA.lpszMenuName);
+            }
+        }
+    }
+
+    //if (!Unicode) dwExStyle |= WS_EX_SETANSICREATOR;
+
+    //lpszClsVersion = ClassNameToVersion(lpClassName, NULL, &lpLibFileName, &pCtx, !Unicode);
+    //if (!lpszClsVersion)
+    {
+        //plstrClassVersion = plstrClassName;
+    }
+    //else
+    {
+        //RtlInitUnicodeString(&ClassVersion, lpszClsVersion);
+        //lstrClassVersion.Buffer = ClassVersion.Buffer;
+        //lstrClassVersion.Length = ClassVersion.Length;
+        //lstrClassVersion.MaximumLength = ClassVersion.MaximumLength;
+        //plstrClassVersion = &lstrClassVersion;
+    }
+
+    for (;;)
+    {
+        /*Handle = NtUserCreateWindowEx(dwExStyle,
+            plstrClassName,
+            plstrClassVersion,
+            &WindowName,
+            dwStyle,
+            x,
+            y,
+            nWidth,
+            nHeight,
+            hWndParent,
+            hMenu,
+            hInstance,
+            lpParam,
+            dwFlagsVer,
+            pCtx);*/
+        if (Handle) break;
+        //if (!lpLibFileName) break;
+        if (!ClassFound)
+        {
+            /*dwLastError = GetLastError();
+            if (dwLastError == ERROR_CANNOT_FIND_WND_CLASS)
+            {
+                ClassFound = VersionRegisterClass(ClassName.Buffer, lpLibFileName, pCtx, &hLibModule);
+                if (ClassFound) continue;
+            }*/
+        }
+        //if (hLibModule)
+        {
+            //dwLastError = GetLastError();
+            //FreeLibrary(hLibModule);
+            //SetLastError(dwLastError);
+            //hLibModule = NULL;
+        }
+        break;
+    }
+
+#if 0
+    DbgPrint("[window] NtUserCreateWindowEx() == %d\n", Handle);
+#endif
+
+cleanup:
+    /*if (!Unicode)
+    {
+        if (!IS_ATOM(lpClassName))
+            RtlFreeUnicodeString(&ClassName);
+
+        RtlFreeLargeString(&WindowName);
+    }*/
+
+    return Handle;
+}
+
+HWND
+WINAPI
+DECLSPEC_HOTPATCH
+CreateWindowExA(DWORD dwExStyle,
+    LPCSTR lpClassName,
+    LPCSTR lpWindowName,
+    DWORD dwStyle,
+    int x,
+    int y,
+    int nWidth,
+    int nHeight,
+    HWND hWndParent,
+    HMENU hMenu,
+    HINSTANCE hInstance,
+    LPVOID lpParam)
+{
+    MDICREATESTRUCTA mdi;
+    HWND hwnd = NULL;
+
+    if (!RegisterDefaultClasses)
+    {
+        TRACE("CreateWindowExA RegisterSystemControls\n");
+        RegisterSystemControls();
+    }
+
+    typedef struct _POINT
+    {
+        int x, y;
+    }
+    POINT;
+
+    if (dwExStyle & WS_EX_MDICHILD)
+    {
+        POINT mPos[2];
+        UINT id = 0;
+        HWND top_child;
+        PWND pWndParent;
+
+        //pWndParent = ValidateHwnd(hWndParent);
+        pWndParent = (PWND)ValidateHandle(hwnd, 0);
+
+        if (!pWndParent) return NULL;
+
+        if (pWndParent->fnid != FNID_MDICLIENT) // wine uses WIN_ISMDICLIENT
+        {
+            WARN("WS_EX_MDICHILD, but parent %p is not MDIClient\n", hWndParent);
+            goto skip_mdi;
+        }
+
+        /* lpParams of WM_[NC]CREATE is different for MDI children.
+        * MDICREATESTRUCT members have the originally passed values.
+        */
+        mdi.szClass = lpClassName;
+        mdi.szTitle = lpWindowName;
+        mdi.hOwner = hInstance;
+        mdi.x = x;
+        mdi.y = y;
+        mdi.cx = nWidth;
+        mdi.cy = nHeight;
+        mdi.style = dwStyle;
+        mdi.lParam = (LPARAM)lpParam;
+
+        lpParam = (LPVOID)&mdi;
+
+        if (pWndParent->style & MDIS_ALLCHILDSTYLES)
+        {
+            if (dwStyle & WS_POPUP)
+            {
+                WARN("WS_POPUP with MDIS_ALLCHILDSTYLES is not allowed\n");
+                return(0);
+            }
+            dwStyle |= (WS_CHILD | WS_CLIPSIBLINGS);
+        }
+        else
+        {
+            dwStyle &= ~WS_POPUP;
+            dwStyle |= (WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CAPTION |
+                WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+        }
+
+        top_child = GetWindow(hWndParent, GW_CHILD);
+
+        if (top_child)
+        {
+            /* Restore current maximized child */
+            if ((dwStyle & WS_VISIBLE) && IsZoomed(top_child))
+            {
+                TRACE("Restoring current maximized child %p\n", top_child);
+                //SendMessageW(top_child, WM_SETREDRAW, FALSE, 0);
+                //ShowWindow(top_child, SW_RESTORE);
+                //SendMessageW(top_child, WM_SETREDRAW, TRUE, 0);
+            }
+        }
+
+        //MDI_CalcDefaultChildPos(hWndParent, -1, mPos, 0, &id);
+
+        if (!(dwStyle & WS_POPUP)) hMenu = UlongToHandle(id);
+
+        if (dwStyle & (WS_CHILD | WS_POPUP))
+        {
+            if (x == CW_USEDEFAULT || x == CW_USEDEFAULT16)
+            {
+                x = mPos[0].x;
+                y = mPos[0].y;
+            }
+            if (nWidth == CW_USEDEFAULT || nWidth == CW_USEDEFAULT16 || !nWidth)
+                nWidth = mPos[1].x;
+            if (nHeight == CW_USEDEFAULT || nHeight == CW_USEDEFAULT16 || !nHeight)
+                nHeight = mPos[1].y;
+        }
+    }
+
+skip_mdi:
+    hwnd = User32CreateWindowEx(dwExStyle,
+        lpClassName,
+        lpWindowName,
+        dwStyle,
+        x,
+        y,
+        nWidth,
+        nHeight,
+        hWndParent,
+        hMenu,
+        hInstance,
+        lpParam,
+        NUCWE_ANSI);
+    return hwnd;
+}
+
+
+HWND CreateWindowA(const char* lpClassName,
+    const char* lpWindowName,
+    UINT dwStyle,
+    int x,
+    int y,
+    int nWidth,
+    int nHeight,
+    HWND hWndParent,
+    HMENU hMenu,
+    HINSTANCE hInstance,
+    void* lpParam)
+{
+    return CreateWindowExA(0,lpClassName, lpWindowName, dwStyle, x, y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+};
+
+#define MAX_BUFFER_LEN 512
+#define MAX_ATOM_LEN 512
+
+typedef __wchar_t WCHAR;
+
+typedef const WCHAR* LPCWSTR;
+typedef __wchar_t WCHAR;
+typedef unsigned char UCHAR;
+typedef char* LPSTR;
+typedef const char* LPCSTR;
+typedef WCHAR* LPWSTR;
+typedef const WCHAR* LPCWSTR;
+
+typedef struct _WNDCLASSEXW {
+    UINT cbSize;
+    UINT style;
+    WNDPROC lpfnWndProc;
+    int cbClsExtra;
+    int cbWndExtra;
+    HINSTANCE hInstance;
+    HICON hIcon;
+    HCURSOR hCursor;
+    HBRUSH hbrBackground;
+    LPCWSTR lpszMenuName;
+    LPCWSTR lpszClassName;
+    HICON hIconSm;
+} WNDCLASSEXW, * LPWNDCLASSEXW, * PWNDCLASSEXW;
+
+#define 	RtlCopyMemory(Destination, Source, Length)   memcpy(Destination, Source, Length)
+
+#define IS_INTRESOURCE(i) (((ULONG_PTR)(i) >> 16) == 0)
+
+#define CP_ACP 0
+#define MultiByteToWideChar __MultiByteToWideChar
+#define WideCharToMultiByte __WideCharToMultiByte
+INT __MultiByteToWideChar(UINT page, DWORD flags, LPCSTR src, INT srclen, LPWSTR dst, INT dstlen);
+INT __WideCharToMultiByte(UINT page, DWORD flags, LPCWSTR src, INT srclen, LPSTR dst, INT dstlen, LPCSTR defchar, BOOL* used);
+
+#define IS_ATOM(x) \
+  (((ULONG_PTR)(x) > 0x0) && ((ULONG_PTR)(x) < 0x10000))
+
+#define CSF_SERVERSIDEPROC  0x0001
+#define CSF_ANSIPROC        0x0002
+#define CSF_WOWDEFERDESTROY 0x0004
+#define CSF_SYSTEMCLASS     0x0008
+#define CSF_WOWCLASS        0x0010
+#define CSF_WOWEXTRA        0x0020
+#define CSF_CACHEDSMICON    0x0040
+#define CSF_WIN40COMPAT     0x0080
+
+ATOM WINAPI
+RegisterClassExWOWW(WNDCLASSEXW* lpwcx,
+    LPDWORD pdwWowData,
+    WORD fnID,
+    DWORD dwFlags,
+    BOOL ChkRegCls)
+{
+    ATOM Atom;
+    WNDCLASSEXW WndClass;
+    UNICODE_STRING ClassName;
+    UNICODE_STRING ClassVersion;
+    UNICODE_STRING MenuName = { 0 };
+    CLSMENUNAME clsMenuName;
+    ANSI_STRING AnsiMenuName;
+    LPCWSTR lpszClsVersion;
+
+    if (lpwcx == NULL || lpwcx->cbSize != sizeof(*lpwcx) ||
+        lpwcx->cbClsExtra < 0 || lpwcx->cbWndExtra < 0 ||
+        lpwcx->lpszClassName == NULL)
+    {
+        TRACE("RegisterClassExWOWW Invalid Parameter Error!\n");
+        //SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+
+    if (ChkRegCls)
+    {
+        if (!RegisterDefaultClasses) RegisterSystemControls();
+    }
+    /*
+     * On real Windows this looks more like:
+     *    if (lpwcx->hInstance == User32Instance &&
+     *        *(PULONG)((ULONG_PTR)NtCurrentTeb() + 0x6D4) & 0x400)
+     * But since I have no idea what the magic field in the
+     * TEB structure means, I rather decided to omit that.
+     * -- Filip Navara
+
+        GetWin32ClientInfo()->dwExpWinVer & (WINVER == 0x400)
+     */
+    if (lpwcx->hInstance == User32Instance)
+    {
+        TRACE("RegisterClassExWOWW User32Instance!\n");
+        //SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    /* Yes, this is correct. We should modify the passed structure. */
+    if (lpwcx->hInstance == NULL)
+        ((WNDCLASSEXW*)lpwcx)->hInstance = GetModuleHandleW(NULL);
+
+    RtlCopyMemory(&WndClass, lpwcx, sizeof(*lpwcx));
+
+    RtlInitEmptyAnsiString(&AnsiMenuName, NULL, 0);
+    if (!IS_INTRESOURCE(WndClass.lpszMenuName))
+    {
+        if (WndClass.lpszMenuName[0])
+        {
+            RtlInitUnicodeString(&MenuName, WndClass.lpszMenuName);
+            RtlUnicodeStringToAnsiString(&AnsiMenuName, &MenuName, TRUE);
+        }
+    }
+    else
+    {
+        MenuName.Buffer = (LPWSTR)WndClass.lpszMenuName;
+        AnsiMenuName.Buffer = (PCHAR)WndClass.lpszMenuName;
+    }
+
+    if (WndClass.lpszClassName && !IS_ATOM(WndClass.lpszClassName))
+    {
+        RtlInitUnicodeString(&ClassName, WndClass.lpszClassName);
+    }
+    else
+    {
+        ClassName.Length = ClassName.MaximumLength = 0;
+        ClassName.Buffer = (LPWSTR)WndClass.lpszClassName;
+    }
+
+    ClassVersion = ClassName;
+    if (fnID == 0)
+    {
+        lpszClsVersion = ClassNameToVersion(lpwcx->lpszClassName, NULL, NULL, NULL, FALSE);
+        if (lpszClsVersion)
+        {
+            RtlInitUnicodeString(&ClassVersion, lpszClsVersion);
+        }
+    }
+
+    clsMenuName.pszClientAnsiMenuName = AnsiMenuName.Buffer;
+    clsMenuName.pwszClientUnicodeMenuName = MenuName.Buffer;
+    clsMenuName.pusMenuName = &MenuName;
+
+    Atom = NtUserRegisterClassExWOW(&WndClass,
+        &ClassName,
+        &ClassVersion,
+        &clsMenuName,
+        fnID,
+        dwFlags,
+        pdwWowData);
+
+    TRACE("atom=%04x wndproc=%p hinst=%p bg=%p style=%08x clsExt=%d winExt=%d class=%p\n",
+        Atom, lpwcx->lpfnWndProc, lpwcx->hInstance, lpwcx->hbrBackground,
+        lpwcx->style, lpwcx->cbClsExtra, lpwcx->cbWndExtra, WndClass);
+
+    return Atom;
+}
+
+ATOM WINAPI
+RegisterClassExA(CONST WNDCLASSEXA* lpwcx)
+{
+    ATOM Atom;
+    WNDCLASSEXW WndClass;
+    WCHAR mname[MAX_BUFFER_LEN];
+    WCHAR cname[MAX_BUFFER_LEN];
+
+    C_ASSERT(sizeof(WndClass) == sizeof(*lpwcx));
+
+    RtlCopyMemory(&WndClass, lpwcx, sizeof(*lpwcx));
+
+    if (WndClass.lpszMenuName && !IS_INTRESOURCE(WndClass.lpszMenuName))
+    {
+        if (WndClass.lpszMenuName[0])
+        {
+            if (!MultiByteToWideChar(CP_ACP, 0, lpwcx->lpszMenuName, -1, mname, MAX_ATOM_LEN + 1))
+                return 0;
+
+            WndClass.lpszMenuName = mname;
+        }
+    }
+
+    if (WndClass.lpszClassName && !IS_ATOM(WndClass.lpszClassName))
+    {
+        if (!MultiByteToWideChar(CP_ACP, 0, lpwcx->lpszClassName, -1, cname, MAX_ATOM_LEN + 1))
+            return 0;
+
+        WndClass.lpszClassName = cname;
+    }
+
+    Atom = RegisterClassExWOWW(&WndClass,
+        NULL,
+        0,
+        CSF_ANSIPROC,
+        TRUE);
+
+    TRACE("A atom=%04x wndproc=%p hinst=%p bg=%p style=%08x clsExt=%d winExt=%d class=%p\n",
+        Atom, lpwcx->lpfnWndProc, lpwcx->hInstance, lpwcx->hbrBackground,
+        lpwcx->style, lpwcx->cbClsExtra, lpwcx->cbWndExtra, WndClass);
+
+    return Atom;
+}
+
+ATOM WINAPI
+RegisterClassA(CONST WNDCLASSA* lpWndClass)
+{
+    WNDCLASSEXA Class;
+
+    if (lpWndClass == NULL)
+        return 0;
+
+    /* These MUST be copied manually, since on 64 bit architectures the
+       alignment of the members is different between the 2 structs! */
+    Class.style = lpWndClass->style;
+    Class.lpfnWndProc = lpWndClass->lpfnWndProc;
+    Class.cbClsExtra = lpWndClass->cbClsExtra;
+    Class.cbWndExtra = lpWndClass->cbWndExtra;
+    Class.hInstance = lpWndClass->hInstance;
+    Class.hIcon = lpWndClass->hIcon;
+    Class.hCursor = lpWndClass->hCursor;
+    Class.hbrBackground = lpWndClass->hbrBackground;
+    Class.lpszMenuName = lpWndClass->lpszMenuName;
+    Class.lpszClassName = lpWndClass->lpszClassName;
+
+    Class.cbSize = sizeof(Class);
+    Class.hIconSm = NULL;
+
+    return RegisterClassExA(&Class);
+}
 
 
 

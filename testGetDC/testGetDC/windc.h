@@ -1,0 +1,1 @@
+HDC APIENTRY NtUserGetDCEx(HWND hWnd OPTIONAL, HANDLE ClipRegion, ULONG Flags);

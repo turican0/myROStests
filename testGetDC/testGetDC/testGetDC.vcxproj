@@ -135,7 +135,6 @@
     <ClCompile Include="windc.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="myDCE.h" />
     <ClInclude Include="supportFunctons.h" />
     <ClInclude Include="win32k.h" />
   </ItemGroup>
