@@ -260,18 +260,6 @@ HWND UserHMGetHandle(PWND pwnd)
     return pwnd->hwnd;
 };
 
-
-
-
-
-
-
-
-
-
-
-
-
 void
 StructDceDrawState(PDCE pDce)
 {
@@ -280,20 +268,48 @@ StructDceDrawState(PDCE pDce)
     ListEntry = pDce->pwndCurrectl.Flink;
     while (ListEntry != &pDce->pwndCurrectl)
     {
-        ERR("item - F1:%x\n", pwnd);
         pwnd = CONTAINING_RECORD(ListEntry, DCEPWND_TYPE, Entry)->pwnd;
-        ERR("item - F2:%x\n", pwnd);
         ListEntry = ListEntry->Flink;
-        ERR("item - F3:%x\n", pwnd);
-        pwnd = CONTAINING_RECORD(ListEntry, DCEPWND_TYPE, Entry)->pwnd;
-        ERR("item - F4:%x\n", pwnd);
+        //ERR("item - F3:%x\n", pwnd);
+        if (pwnd)ERR("item - F3:%d\n", pwnd->hwnd);
     }
+    if (pDce->pwndCurrectl.Flink != &pDce->pwndCurrectl)
+    {
+        pwnd = CONTAINING_RECORD(pDce->pwndCurrectl.Flink, DCEPWND_TYPE, Entry)->pwnd;
+        if (pwnd)ERR("tail:%d\n", pwnd->hwnd);
+    }
+    if (pDce->pwndCurrectl.Blink != &pDce->pwndCurrectl)
+    {
+        //ERR("item - F3:%x\n", pwnd);
+        pwnd = CONTAINING_RECORD(pDce->pwndCurrectl.Blink, DCEPWND_TYPE, Entry)->pwnd;
+        if (pwnd)ERR("begin:%d\n", pwnd->hwnd);
+    }
+}
+
+BOOL
+StructDceExist(PDCE pDce, PWND pwnd)
+{
+    PLIST_ENTRY ListEntry;
+    PWND listPwnd = NULL;
+    ListEntry = pDce->pwndCurrectl.Flink;
+    while (ListEntry != &pDce->pwndCurrectl)
+    {
+        listPwnd = CONTAINING_RECORD(ListEntry, DCEPWND_TYPE, Entry)->pwnd;
+        ListEntry = ListEntry->Flink;
+        if(listPwnd== pwnd)
+            return TRUE;
+    }
+    return FALSE;
 }
 
 void
 StructDceAddPwnd(PDCE pDce, PWND pwnd, int index)
 {
     //pDce->pwndCurrect = pwnd;
+    if (!pwnd)
+        return;
+    if (StructDceExist(pDce, pwnd))
+        return;
 
     StructDceDrawState(pDce);
 
@@ -309,7 +325,7 @@ StructDceAddPwnd(PDCE pDce, PWND pwnd, int index)
     }
     DCEPWNDEntry->pwnd = pwnd;
     // ERR("StructDceAddPwnd - E\n");
-    InsertTailList(&pDce->pwndCurrectl, &DCEPWNDEntry->Entry);//original code swith to this
+    InsertTailList(pDce->pwndCurrectl.Flink, &DCEPWNDEntry->Entry);//original code swith to this
     /* {
             PLIST_ENTRY OldBlink;
             //ERR("StructDceAddPwnd - F\n");
@@ -439,7 +455,18 @@ int main()
     Window.hwnd = 20;
     WND Window2;
     Window2.hwnd = 40;
+    WND Window3;
+    Window3.hwnd = 60;
+    StructDceDrawState(&Dce);
     StructDceAddPwnd(&Dce, &Window, 0);
+    StructDceDrawState(&Dce);
     StructDceAddPwnd(&Dce, &Window2, 0);
+    StructDceDrawState(&Dce);
+    StructDceAddPwnd(&Dce, &Window3, 0);
+    StructDceDrawState(&Dce);
+    StructDceAddPwnd(&Dce, &Window3, 0);
+    StructDceDrawState(&Dce);
+    StructDceAddPwnd(&Dce, NULL, 0);
+    StructDceDrawState(&Dce);
     std::cout << "Hello World!\n";
 }
