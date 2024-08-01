@@ -35,7 +35,8 @@ typedef struct _WND
 typedef struct _DCEPWND_TYPE
 {
     LIST_ENTRY Entry;
-    PWND pwnd;
+    HWND hwnd;
+    PWND pwnd;    
 } DCEPWND_TYPE, * PDCEPWND_TYPE;
 
 typedef struct tagDCE
@@ -264,30 +265,28 @@ void
 StructDceDrawState(PDCE pDce)
 {
     PLIST_ENTRY ListEntry;
-    PWND pwnd = NULL;
+    HWND hwnd = NULL;
     ListEntry = pDce->pwndCurrectl.Flink;
     while (ListEntry != &pDce->pwndCurrectl)
     {
-        pwnd = CONTAINING_RECORD(ListEntry, DCEPWND_TYPE, Entry)->pwnd;
+        hwnd = CONTAINING_RECORD(ListEntry, DCEPWND_TYPE, Entry)->hwnd;
         ListEntry = ListEntry->Flink;
-        //ERR("item - F3:%x\n", pwnd);
-        if (pwnd)ERR("item - F3:%d\n", pwnd->hwnd);
+        if (hwnd)ERR("item - F3:%d\n", hwnd);
     }
     if (pDce->pwndCurrectl.Flink != &pDce->pwndCurrectl)
     {
-        pwnd = CONTAINING_RECORD(pDce->pwndCurrectl.Flink, DCEPWND_TYPE, Entry)->pwnd;
-        if (pwnd)ERR("tail:%d\n", pwnd->hwnd);
+        hwnd = CONTAINING_RECORD(pDce->pwndCurrectl.Flink, DCEPWND_TYPE, Entry)->hwnd;
+        if (hwnd)ERR("tail:%d\n", hwnd);
     }
     if (pDce->pwndCurrectl.Blink != &pDce->pwndCurrectl)
     {
-        //ERR("item - F3:%x\n", pwnd);
-        pwnd = CONTAINING_RECORD(pDce->pwndCurrectl.Blink, DCEPWND_TYPE, Entry)->pwnd;
-        if (pwnd)ERR("begin:%d\n", pwnd->hwnd);
+        hwnd = CONTAINING_RECORD(pDce->pwndCurrectl.Blink, DCEPWND_TYPE, Entry)->hwnd;
+        if (hwnd)ERR("begin:%d\n", hwnd);
     }
 }
 
 BOOL
-StructDceExist(PDCE pDce, PWND pwnd)
+StructDceExistPwnd(PDCE pDce, PWND pwnd)
 {
     PLIST_ENTRY ListEntry;
     PWND listPwnd = NULL;
@@ -296,154 +295,142 @@ StructDceExist(PDCE pDce, PWND pwnd)
     {
         listPwnd = CONTAINING_RECORD(ListEntry, DCEPWND_TYPE, Entry)->pwnd;
         ListEntry = ListEntry->Flink;
-        if(listPwnd== pwnd)
+        if (listPwnd == pwnd)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+BOOL
+StructDceExistHwnd(PDCE pDce, HWND hwnd)
+{
+    PLIST_ENTRY ListEntry;
+    HWND listHwnd = NULL;
+    ListEntry = pDce->pwndCurrectl.Flink;
+    while (ListEntry != &pDce->pwndCurrectl)
+    {
+        listHwnd = CONTAINING_RECORD(ListEntry, DCEPWND_TYPE, Entry)->hwnd;
+        ListEntry = ListEntry->Flink;
+        if (listHwnd == hwnd)
             return TRUE;
     }
     return FALSE;
 }
 
 void
-StructDceAddPwnd(PDCE pDce, PWND pwnd, int index)
+StructDceAdd(PDCE pDce, PWND pwnd, int index)
 {
-    //pDce->pwndCurrect = pwnd;
     if (!pwnd)
         return;
-    if (StructDceExist(pDce, pwnd))
+    if (StructDceExistPwnd(pDce, pwnd))
         return;
-
-    StructDceDrawState(pDce);
-
-    ERR("StructDceAddPwnd - A %x %d\n", pwnd, index);
     PDCEPWND_TYPE DCEPWNDEntry;
-    // ERR("StructDceAddPwnd - B\n");
     DCEPWNDEntry = ExAllocatePoolWithTag(PagedPool, sizeof(DCEPWND_TYPE), USERTAG_DCE);
-    // ERR("StructDceAddPwnd - C\n");
     if (!DCEPWNDEntry)
-    {
-        // ERR("StructDceAddPwnd - D\n");
         return;
-    }
     DCEPWNDEntry->pwnd = pwnd;
-    // ERR("StructDceAddPwnd - E\n");
-    InsertTailList(pDce->pwndCurrectl.Flink, &DCEPWNDEntry->Entry);//original code swith to this
-    /* {
-            PLIST_ENTRY OldBlink;
-            //ERR("StructDceAddPwnd - F\n");
-            OldBlink = (&pDce->pwndCurrectl)->Blink;
-            //ERR("StructDceAddPwnd - G\n");
-            (&DCEPWNDEntry->Entry)->Flink = (&pDce->pwndCurrectl);
-            //ERR("StructDceAddPwnd - H\n");
-            (&DCEPWNDEntry->Entry)->Blink = OldBlink;
-            //ERR("StructDceAddPwnd - I\n");
-            OldBlink->Flink = (&DCEPWNDEntry->Entry);
-            //ERR("StructDceAddPwnd - J\n");
-            (&pDce->pwndCurrectl)->Blink = (&DCEPWNDEntry->Entry);
-            //ERR("StructDceAddPwnd - K\n");
-        }*/
-
-    ERR("StructDceAddPwnd - F\n");
-
-    StructDceDrawState(pDce);
+    DCEPWNDEntry->hwnd = (pwnd ? UserHMGetHandle(pwnd) : NULL);
+    InsertTailList(pDce->pwndCurrectl.Flink, &DCEPWNDEntry->Entry);
 };
 
 PWND
-StructDceGetPwnd(PDCE pDce)
+StructDceGetFirstPwnd(PDCE pDce)
 {
-    StructDceDrawState(pDce);
-    //return pDce->pwndCurrect;
-    ERR("StructDceGetPwnd - A\n");
-    return CONTAINING_RECORD(&pDce->pwndCurrectl, DCEPWND_TYPE, Entry)->pwnd;
+    return CONTAINING_RECORD(&pDce->pwndCurrectl.Blink, DCEPWND_TYPE, Entry)->pwnd;
+};
+
+PWND
+StructDceGetLastPwnd(PDCE pDce)
+{
+    return CONTAINING_RECORD(&pDce->pwndCurrectl.Flink, DCEPWND_TYPE, Entry)->pwnd;
 };
 
 HWND
-StructDceGetHwnd(PDCE pDce)
+StructDceGetFirstHwnd(PDCE pDce)
 {
-    StructDceDrawState(pDce);
-    //return (pDce->pwndCurrect ? UserHMGetHandle(pDce->pwndCurrect) : NULL);
-    ERR("StructDceGetHwnd - A %x\n", pDce);
-    PWND Wnd = CONTAINING_RECORD(&pDce->pwndCurrectl, DCEPWND_TYPE, Entry)->pwnd;
-    ERR("StructDceGetHwnd - B %x\n", Wnd);
-    //ERR("StructDceGetHwnd - B\n");
-    return (Wnd ? UserHMGetHandle(Wnd) : NULL);
+    return CONTAINING_RECORD(pDce->pwndCurrectl.Blink, DCEPWND_TYPE, Entry)->hwnd;
+};
+
+HWND
+StructDceGetLastHwnd(PDCE pDce)
+{
+    return CONTAINING_RECORD(pDce->pwndCurrectl.Flink, DCEPWND_TYPE, Entry)->hwnd;
 };
 
 void
-StructDceRemoveHwnd(PDCE pDce)
+StructDceRemoveLast(PDCE pDce)
 {
-    StructDceDrawState(pDce);
-    //pDce->pwndCurrect = NULL;
-    ERR("StructDceRemoveHwnd - A\n");
     if (!IsListEmpty(&pDce->pwndCurrectl))
     {
-        //ERR("StructDceRemoveHwnd - B\n");
         PLIST_ENTRY Entry = RemoveHeadList(&pDce->pwndCurrectl);
-        //ERR("StructDceRemoveHwnd - C\n");
         PDCEPWND_TYPE DCEPWNDEntry = CONTAINING_RECORD(Entry, DCEPWND_TYPE, Entry);
-        //ERR("StructDceRemoveHwnd - D\n");
         ExFreePoolWithTag(DCEPWNDEntry, USERTAG_DCE);
-        //ERR("StructDceRemoveHwnd - E\n");
     }
-    //StructDceDrawState(pDce);
+};
+
+void
+StructDceRemoveFirst(PDCE pDce)
+{
+    StructDceDrawState(pDce);
+    if (!IsListEmpty(&pDce->pwndCurrectl))
+    {
+        PLIST_ENTRY Entry = RemoveTailList(&pDce->pwndCurrectl);
+        PDCEPWND_TYPE DCEPWNDEntry = CONTAINING_RECORD(Entry, DCEPWND_TYPE, Entry);
+        ExFreePoolWithTag(DCEPWNDEntry, USERTAG_DCE);
+    }
 };
 
 void
 StructDceClean(PDCE pDce)
 {
     StructDceDrawState(pDce);
-    //pDce->pwndCurrect = NULL;
-    ERR("StructDceClean - A\n");
     while (!IsListEmpty(&pDce->pwndCurrectl))
     {
-        //ERR("StructDceClean - B\n");
-        //PLIST_ENTRY Entry = RemoveHeadList(&pDce->pwndCurrectl);//original code swith to this
-
-        PLIST_ENTRY Flink;
-        PLIST_ENTRY Entry2;
-        //ERR("StructDceClean - B1\n");
-        Entry2 = (&pDce->pwndCurrectl)->Flink;
-        //ERR("StructDceClean - B2\n");
-        Flink = Entry2->Flink;
-        //ERR("StructDceClean - B3\n");
-        (&pDce->pwndCurrectl)->Flink = Flink;
-        //ERR("StructDceClean - B4\n");
-        Flink->Blink = (&pDce->pwndCurrectl);
-        //ERR("StructDceClean - B5\n");
-        PLIST_ENTRY Entry = Entry2;
-
-
-
-        //ERR("StructDceClean - C\n");
+        PLIST_ENTRY Entry = RemoveHeadList(&pDce->pwndCurrectl);       
         PDCEPWND_TYPE DCEPWNDEntry = CONTAINING_RECORD(Entry, DCEPWND_TYPE, Entry);
-        //ERR("StructDceClean - D\n");
         ExFreePoolWithTag(DCEPWNDEntry, USERTAG_DCE);
-        //ERR("StructDceClean - E\n");
     }
-    //StructDceDrawState(pDce);
 };
 
 void
 StructDceInit(PDCE pDce)
 {
-    ERR("StructDceInit - A\n");
-    //StructDceClean(pDce);
-    //ERR("StructDceInit - B\n");
     InitializeListHead(&pDce->pwndCurrectl);
-    //ERR("StructDceInit - C\n");
-    //StructDceDrawState(pDce);
 };
 
 BOOL
-StructDceCompareHwnd(PDCE pDce, PWND Wnd, int index)
+StructDceCompareFirstPwnd(PDCE pDce, PWND pwnd, int index)
 {
-    //HWND curHwnd = (pDce->pwndCurrect ? UserHMGetHandle(pDce->pwndCurrect) : NULL);
-    ERR("StructDceCompareHwnd - A %d\n", index);
-    PWND curWnd = CONTAINING_RECORD(&pDce->pwndCurrectl, DCEPWND_TYPE, Entry)->pwnd;
-    ERR("StructDceCompareHwnd - B %x\n", Wnd);
-    //HWND curHwnd = (Wnd ? UserHMGetHandle(Wnd) : NULL);
-    //ERR("StructDceCompareHwnd - C\n");
-    if (curWnd == Wnd)
+    PWND curWnd = CONTAINING_RECORD(pDce->pwndCurrectl.Blink, DCEPWND_TYPE, Entry)->pwnd;
+    if (curWnd == pwnd)
+        return TRUE;    
+    return FALSE;
+};
+
+BOOL
+StructDceCompareLastPwnd(PDCE pDce, PWND pwnd, int index)
+{
+    PWND curWnd = CONTAINING_RECORD(pDce->pwndCurrectl.Flink, DCEPWND_TYPE, Entry)->pwnd;
+    if (curWnd == pwnd)
         return TRUE;
-    ERR("StructDceCompareHwnd - D\n");
+    return FALSE;
+};
+
+BOOL
+StructDceCompareFirstHwnd(PDCE pDce, HWND hwnd, int index)
+{
+    HWND curHwnd = CONTAINING_RECORD(pDce->pwndCurrectl.Blink, DCEPWND_TYPE, Entry)->hwnd;
+    if (curHwnd == hwnd)
+        return TRUE;
+    return FALSE;
+};
+
+BOOL
+StructDceCompareLastHwnd(PDCE pDce, HWND hwnd, int index)
+{
+    HWND curHwnd = CONTAINING_RECORD(pDce->pwndCurrectl.Flink, DCEPWND_TYPE, Entry)->hwnd;
+    if (curHwnd == hwnd)
+        return TRUE;
     return FALSE;
 };
 
@@ -458,15 +445,31 @@ int main()
     WND Window3;
     Window3.hwnd = 60;
     StructDceDrawState(&Dce);
-    StructDceAddPwnd(&Dce, &Window, 0);
+    StructDceAdd(&Dce, &Window, 0);
     StructDceDrawState(&Dce);
-    StructDceAddPwnd(&Dce, &Window2, 0);
+    StructDceAdd(&Dce, &Window2, 0);
     StructDceDrawState(&Dce);
-    StructDceAddPwnd(&Dce, &Window3, 0);
+    StructDceAdd(&Dce, &Window3, 0);
     StructDceDrawState(&Dce);
-    StructDceAddPwnd(&Dce, &Window3, 0);
+    StructDceAdd(&Dce, &Window3, 0);
     StructDceDrawState(&Dce);
-    StructDceAddPwnd(&Dce, NULL, 0);
+    StructDceAdd(&Dce, NULL, 0);
     StructDceDrawState(&Dce);
+
+    BOOL exist2 = StructDceCompareFirstHwnd(&Dce, 20, 0);
+    BOOL exist3 = StructDceCompareLastHwnd(&Dce, 60, 1);
+
+    HWND hh = StructDceGetFirstHwnd(&Dce);
+    HWND th = StructDceGetLastHwnd(&Dce);
+
+    BOOL exist = StructDceExistHwnd(&Dce,40);
+
+    StructDceRemoveLast(&Dce);
+    StructDceDrawState(&Dce);
+    StructDceRemoveFirst(&Dce);
+    StructDceDrawState(&Dce);
+    StructDceClean(&Dce);
+    StructDceDrawState(&Dce);
+
     std::cout << "Hello World!\n";
 }
