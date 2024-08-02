@@ -2,6 +2,8 @@
 //
 
 #include <iostream>
+#include <stdio.h>
+#include <stdarg.h>
 
 #if defined(_M_MRX000) && !(defined(MIDL_PASS) || defined(RC_INVOKED)) && defined(ENABLE_RESTRICTED)
 #define RESTRICTED_POINTER __restrict
@@ -61,7 +63,10 @@ typedef struct tagDCE
 } DCE, * PDCE;
 
 void ERR(const char* format, ...) {
-    printf(format);
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
 }
 
 typedef char CHAR;
@@ -266,22 +271,33 @@ StructDceDrawState(PDCE pDce)
 {
     PLIST_ENTRY ListEntry;
     HWND hwnd = NULL;
+    PWND pwnd = NULL;
+    DCEPWND_TYPE* id = NULL;
     ListEntry = pDce->pwndCurrectl.Flink;
     while (ListEntry != &pDce->pwndCurrectl)
     {
+        id = CONTAINING_RECORD(ListEntry, DCEPWND_TYPE, Entry);
         hwnd = CONTAINING_RECORD(ListEntry, DCEPWND_TYPE, Entry)->hwnd;
+        pwnd = CONTAINING_RECORD(ListEntry, DCEPWND_TYPE, Entry)->pwnd;
         ListEntry = ListEntry->Flink;
-        if (hwnd)ERR("item - F3:%d\n", hwnd);
+        if (hwnd)
+            ERR("Draw item: %p %p %p\n", id, hwnd, pwnd);
     }
     if (pDce->pwndCurrectl.Flink != &pDce->pwndCurrectl)
     {
+        id = CONTAINING_RECORD(pDce->pwndCurrectl.Flink, DCEPWND_TYPE, Entry);
         hwnd = CONTAINING_RECORD(pDce->pwndCurrectl.Flink, DCEPWND_TYPE, Entry)->hwnd;
-        if (hwnd)ERR("tail:%d\n", hwnd);
+        pwnd = CONTAINING_RECORD(pDce->pwndCurrectl.Flink, DCEPWND_TYPE, Entry)->pwnd;
+        if (hwnd)
+            ERR("tail: %p %p %p\n", id, hwnd, pwnd);
     }
     if (pDce->pwndCurrectl.Blink != &pDce->pwndCurrectl)
     {
+        id = CONTAINING_RECORD(pDce->pwndCurrectl.Blink, DCEPWND_TYPE, Entry);
         hwnd = CONTAINING_RECORD(pDce->pwndCurrectl.Blink, DCEPWND_TYPE, Entry)->hwnd;
-        if (hwnd)ERR("begin:%d\n", hwnd);
+        pwnd = CONTAINING_RECORD(pDce->pwndCurrectl.Blink, DCEPWND_TYPE, Entry)->pwnd;
+        if (hwnd)
+            ERR("begin: %p %p %p\n", id, hwnd, pwnd);
     }
 }
 
@@ -459,11 +475,11 @@ int main()
     DCE Dce;
     StructDceInit(&Dce);
     WND Window;
-    Window.hwnd = 20;
+    Window.hwnd = 0x20;
     WND Window2;
-    Window2.hwnd = 40;
+    Window2.hwnd = 0x40;
     WND Window3;
-    Window3.hwnd = 60;
+    Window3.hwnd = 0x60;
     StructDceDrawState(&Dce);
     StructDceAdd(&Dce, &Window, 0);
     StructDceDrawState(&Dce);
