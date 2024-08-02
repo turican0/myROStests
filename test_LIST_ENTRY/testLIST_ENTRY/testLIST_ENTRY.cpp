@@ -434,6 +434,26 @@ StructDceCompareLastHwnd(PDCE pDce, HWND hwnd, int index)
     return FALSE;
 };
 
+VOID
+StructDceRemovePwnd(PDCE pDce, PWND pwnd, int index)
+{
+    PLIST_ENTRY ListEntry;
+    PWND listPwnd = NULL;
+    ListEntry = pDce->pwndCurrectl.Flink;
+    while (ListEntry != &pDce->pwndCurrectl)
+    {
+        listPwnd = CONTAINING_RECORD(ListEntry, DCEPWND_TYPE, Entry)->pwnd;
+        if (listPwnd == pwnd)
+        {
+            PLIST_ENTRY Entry = RemoveHeadList(ListEntry->Blink);
+            PDCEPWND_TYPE DCEPWNDEntry = CONTAINING_RECORD(Entry, DCEPWND_TYPE, Entry);
+            ExFreePoolWithTag(DCEPWNDEntry, USERTAG_DCE);
+            return;
+        }
+        ListEntry = ListEntry->Flink;
+    }
+};
+
 int main()
 {
     DCE Dce;
@@ -456,7 +476,11 @@ int main()
     StructDceAdd(&Dce, NULL, 0);
     StructDceDrawState(&Dce);
 
-    BOOL exist2 = StructDceCompareFirstHwnd(&Dce, 20, 0);
+    StructDceRemovePwnd(&Dce, &Window3, 0);
+
+    StructDceDrawState(&Dce);
+
+    /*BOOL exist2 = StructDceCompareFirstHwnd(&Dce, 20, 0);
     BOOL exist3 = StructDceCompareLastHwnd(&Dce, 60, 1);
 
     HWND hh = StructDceGetFirstHwnd(&Dce);
@@ -469,7 +493,7 @@ int main()
     StructDceRemoveFirst(&Dce);
     StructDceDrawState(&Dce);
     StructDceClean(&Dce);
-    StructDceDrawState(&Dce);
+    StructDceDrawState(&Dce);*/
 
     std::cout << "Hello World!\n";
 }
